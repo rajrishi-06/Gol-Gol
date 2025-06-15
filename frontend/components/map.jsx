@@ -45,6 +45,8 @@ const containerStyle = { width: '100%', height: '500px' };
 const center = { lat: 28.6139, lng: 77.2090 }; // Delhi default
 
 
+const apiKey = import.meta.env.VITE_MAP_API_KEY;
+
 const Map = () => {
   const [map, setMap] = useState(null);
   const [pickup, setPickup] = useState(null);
@@ -92,7 +94,7 @@ const Map = () => {
 
   return (
     <LoadScript
-      googleMapsApiKey="AIzaSyBV6FqeZZSkYLLB7-tshLTF9qg4QCsPls4"
+      googleMapsApiKey ={ apiKey}
       libraries={['places']}
     >
       <GoogleMap
