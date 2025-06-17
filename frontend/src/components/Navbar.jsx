@@ -1,0 +1,107 @@
+import React, { useState } from 'react';
+
+export default function Navbar() {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <>
+      {/* Navbar */}
+      <nav className="relative flex items-center p-4 bg-white shadow">
+        {/* Toggle Button */}
+        <button
+          className="absolute left-4 p-2 focus:outline-none"
+          onClick={() => setOpen(true)}
+          aria-label="Open menu"
+        >
+          {/* Hamburger icon */}
+          <svg
+            className="h-6 w-6 text-gray-700"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M4 6h16M4 12h16M4 18h16"
+            />
+          </svg>
+        </button>
+
+        {/* Brand (centered) */}
+        <div className="mx-auto font-bold text-xl text-gray-900">Gol Gol</div>
+
+        {/* Login Button */}
+        <div className="absolute right-4">
+          <button className="text-sm text-gray-600 hover:text-black focus:outline-none">
+            LOG IN
+          </button>
+        </div>
+      </nav>
+
+      {/* Overlay & Drawer */}
+      {open && (
+        <div className="fixed inset-0 z-50 flex">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black opacity-50"
+            onClick={() => setOpen(false)}
+          />
+
+          {/* Side Drawer */}
+          <div className="relative w-64 bg-white h-full shadow-xl overflow-auto">
+            {/* Close button */}
+          <div className="flex justify-end p-4 pb-0">
+            <button
+              onClick={() => setOpen(false)}
+              aria-label="Close menu"
+              className="p-2 rounded-md hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              <svg
+                className="w-6 h-6 text-gray-700"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M6 18L18 6M6 6l12 12"
+                />
+              </svg>
+            </button>
+          </div>
+
+            {/* Drawer Content */}
+            <div className="p-6 ">
+              <ul className="space-y-6 text-gray-800">
+                <li className="flex items-center space-x-3 hover:bg-gray-100 p-2 rounded">
+                  <span>🚗</span>
+                  <span>Book your ride</span>
+                </li>
+                <li className="flex items-center space-x-3 hover:bg-gray-100 p-2 rounded">
+                  <span>💳</span>
+                  <span>Rate card</span>
+                </li>
+                <li className="flex items-center space-x-3 hover:bg-gray-100 p-2 rounded">
+                  <span>🛟</span>
+                  <span>Support</span>
+                </li>
+              </ul>
+
+              {/* Footer links */}
+              <div className="absolute bottom-6 left-6 text-xs text-gray-500">
+                <a href="#" className="hover:underline">
+                  Terms of Service
+                </a>
+                <div className="mt-2">© 2025</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
