@@ -1,7 +1,17 @@
 import React, { useState } from 'react';
-
+import {Link} from 'react-router-dom';
+import { useNavigate } from "react-router-dom";
 export default function Navbar() {
   const [open, setOpen] = useState(false);
+
+
+const navigate = useNavigate();
+
+
+// navigate to login page used in login button on navbar
+function handelClick(){
+navigate("/login");
+};
 
   return (
     <>
@@ -34,7 +44,7 @@ export default function Navbar() {
 
         {/* Login Button */}
         <div className="absolute right-4">
-          <button className="text-sm text-gray-600 hover:text-black focus:outline-none">
+          <button onClick={handelClick} className="text-sm text-gray-600 hover:text-black focus:outline-none">
             LOG IN
           </button>
         </div>
@@ -78,8 +88,10 @@ export default function Navbar() {
             <div className="p-6 ">
               <ul className="space-y-6 text-gray-800">
                 <li className="flex items-center space-x-3 hover:bg-gray-100 p-2 rounded">
-                  <span>🚗</span>
-                  <span>Book your ride</span>
+                  <Link to="/"  onClick={() => setOpen(false)} > <span>🚗</span> <span>Book your ride</span> </Link> <Link/>
+                </li>
+                <li className="flex items-center space-x-3 hover:bg-gray-100 p-2 rounded">
+                  <Link to="/setride"  onClick={() => setOpen(false)} > <span>🚗</span> <span>Publish A Ride</span> </Link>
                 </li>
                 <li className="flex items-center space-x-3 hover:bg-gray-100 p-2 rounded">
                   <span>💳</span>

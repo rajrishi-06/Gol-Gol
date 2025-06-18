@@ -11,9 +11,7 @@ function LeftPanel() {
     return(
         <>
             <div className="w-full sm:w-[550px] h-screen p-6 bg-white overflow-auto border-r border-gray-200">
-                {/* Header */}
-                <Navbar />
-
+               
                 {/* Navigation */}
                 <div className="flex gap-6 text-sm font-medium my-4">
                     <span className="text-green-600 border-b-2 border-green-600 pb-1">DAILY RIDES</span>
