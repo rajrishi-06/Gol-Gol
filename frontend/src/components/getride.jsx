@@ -4,12 +4,12 @@ import RightPanel from "./RightPanel";
  
 
 
-function Getride (){
+function Getride (props){
     return (
-<div className="flex flex-col sm:flex-row h-screen">
-      <LeftPanel />
-      <RightPanel />
-    </div>
+        <div className="flex flex-col sm:flex-row h-screen">
+            <LeftPanel logIn={props.logIn} />
+            <RightPanel />
+        </div>
     )
 };
 

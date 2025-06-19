@@ -1,17 +1,18 @@
 import React, { useState } from 'react';
 import {Link} from 'react-router-dom';
 import { useNavigate } from "react-router-dom";
-export default function Navbar() {
+
+export default function Navbar(props) {
   const [open, setOpen] = useState(false);
+  const navigate = useNavigate();
 
-
-const navigate = useNavigate();
-
-
-// navigate to login page used in login button on navbar
-function handelClick(){
-navigate("/login");
-};
+  // navigate to login page used in login button on navbar
+  function handelClickLogin(){
+    navigate("/login");
+  };
+  function handelClickDashboard(){
+    navigate("/dashboard");
+  };
 
   return (
     <>
@@ -43,11 +44,18 @@ navigate("/login");
         <div className="mx-auto font-bold text-xl text-gray-900">Gol Gol</div>
 
         {/* Login Button */}
-        <div className="absolute right-4">
-          <button onClick={handelClick} className="text-sm text-gray-600 hover:text-black focus:outline-none">
+        {!props.logIn ? <div className="absolute right-4">
+          <button onClick={handelClickLogin}  className="text-sm text-gray-600 hover:text-black focus:outline-none">
             LOG IN
           </button>
+        </div> : 
+        <div className="absolute right-4">
+          <button onClick={handelClickDashboard} className="text-sm text-gray-600 hover:text-black focus:outline-none">
+            Dashboard
+          </button>
         </div>
+        }
+        
       </nav>
 
       {/* Overlay & Drawer */}
