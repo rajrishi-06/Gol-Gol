@@ -41,7 +41,11 @@ export default function Navbar(props) {
         </button>
 
         {/* Brand (centered) */}
-        <div className="mx-auto font-bold text-xl text-gray-900">Gol Gol</div>
+        <div className="mx-auto flex items-center space-x-2 font-bold text-xl text-gray-900">
+          <img src="/src/assets/logo.svg" alt="Logo" className="h-8 w-8" />
+          <span>Gol Gol</span>
+        </div>
+
 
         {/* Login Button */}
         {!props.logIn ? <div className="absolute right-4">

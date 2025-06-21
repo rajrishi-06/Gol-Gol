@@ -6,8 +6,7 @@ import Getride from './components/getride'
 import Login from './components/login'
 import Setride from './components/setride'
 import Dashboard from './components/Dashboard'
-import Signup from './components/signup'
-import Details from './components/details'
+import ProtectedRoute from './components/ProtectedRoute'
 
 function App() {
   let [logIn, setLogIn] = useState(false);
@@ -20,11 +19,14 @@ function App() {
 
     <Route path ="/login" element ={<Login setLogIn={setLogIn} />}/>
 
-    <Route path ="/signup" element ={<Signup setLogIn={setLogIn} />}/>
-
-    <Route path ="/dashboard" element ={<Dashboard setLogIn={setLogIn}/>}/>
-
-    <Route path ="/details" element ={<Details setLogIn={setLogIn}/>}/>
+    <Route
+        path="/dashboard"
+        element={
+          <ProtectedRoute logIn={logIn}>
+            <Dashboard setLogIn={setLogIn} />
+          </ProtectedRoute>
+        }
+      />
 
   </Routes>
 
