@@ -42,7 +42,7 @@ export default function Navbar(props) {
 
         {/* Brand (centered) */}
         <div className="mx-auto flex items-center space-x-2 font-bold text-xl text-gray-900">
-          <img src="/src/assets/logo.svg" alt="Logo" className="h-8 w-8" />
+          <img src="/logo.svg" alt="Logo" className="h-8 w-8" />
           <span>Gol Gol</span>
         </div>
 

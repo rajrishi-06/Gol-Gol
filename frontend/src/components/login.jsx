@@ -120,7 +120,7 @@ export default function Login(props) {
             </button>
             {/* Brand logo + text (centered) */}
   <div className="flex items-center space-x-2">
-    <img src="/src/assets/logo.svg" alt="Logo" className="h-8 w-8" />
+    <img src="/logo.svg" alt="Logo" className="h-8 w-8" />
     <span className="font-bold text-xl text-gray-800">Gol-Gol</span>
   </div>
           </div>
