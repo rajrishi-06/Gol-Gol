@@ -9,11 +9,12 @@ export default function LocationInputs({
   onFromChange = () => {},
   onToChange = () => {},
   onWhenChange = () => {},
+  onClick
 }) {
   return (
     <div className="space-y-4 mb-6">
       {/* FROM */}
-      <div className="flex items-center bg-gray-200 rounded-lg overflow-hidden">
+      <div className="flex items-center bg-gray-200 rounded-lg overflow-hidden" onClick={onClick}>
        {/* give every label the same fixed width */}
         <span className="w-20 px-4 text-xs font-medium text-gray-500 uppercase">
           From
@@ -28,7 +29,7 @@ export default function LocationInputs({
       </div>
 
       {/* TO */}
-      <div className="flex items-center bg-gray-200 rounded-lg overflow-hidden">
+      <div className="flex items-center bg-gray-200 rounded-lg overflow-hidden" onClick={onClick}>
         <span className="w-20 px-4 text-xs font-medium text-gray-500 uppercase">
           To
         </span>

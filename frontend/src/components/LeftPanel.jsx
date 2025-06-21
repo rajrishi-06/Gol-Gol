@@ -29,6 +29,9 @@ function LeftPanel(props) {
                     onFromChange={setFrom}
                     onToChange={setTo}
                     onWhenChange={setWhen}
+                    onClick={() => {
+                        props.setclickedLoc(true)
+                    }}
                 />
 
                 {/* Available Rides */}
