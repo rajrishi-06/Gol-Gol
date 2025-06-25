@@ -1,17 +1,34 @@
-import react, { useState } from "react";
+import React, { useState } from "react";
 import LeftPanel from "./LeftPanel";
 import RightPanel from "./RightPanel";
-import Map from "./Map.jsx";
+import MapPicker from "./MapPicker";
 
+function Getride(props) {
+  const [clickedLocFrom, setClickedLocFrom] = useState(false);
+  const [clickedLocTo, setClickedLocTo] = useState(false);
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
 
-function Getride (props){
-    const [clickedLoc, setclickedLoc] = useState(false);
-    return (
-        <div className="flex flex-col sm:flex-row h-screen">
-            <LeftPanel logIn={props.logIn} setclickedLoc={setclickedLoc} />
-            {clickedLoc ? <Map /> : <RightPanel />}
-        </div>
-    )
-};
+  return (
+    <div className="flex flex-col sm:flex-row h-screen">
+      <LeftPanel
+        logIn={props.logIn}
+        setClickedFrom={setClickedLocFrom}
+        setClickedTo={setClickedLocTo}
+        from={from}
+        to={to}
+      />
 
-export default Getride ;
+      {clickedLocFrom || clickedLocTo ? (
+        <MapPicker
+          setLoc={clickedLocFrom ? setFrom : setTo}
+          setClickedLoc={clickedLocFrom ? setClickedLocFrom : setClickedLocTo}
+        />
+      ) : (
+        <RightPanel />
+      )}
+    </div>
+  );
+}
+
+export default Getride;
