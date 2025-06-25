@@ -7,7 +7,7 @@ import Login from './components/login'
 import Setride from './components/setride'
 import Dashboard from './components/Dashboard'
 import ProtectedRoute from './components/ProtectedRoute'
-import Map from './components/Map'
+
 function App() {
   let [logIn, setLogIn] = useState(false);
   return (
@@ -29,7 +29,6 @@ function App() {
       />
 
   </Routes>
- 
 
 </div>
    
