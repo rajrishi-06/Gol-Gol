@@ -1,4 +1,3 @@
-// LocationInputs.jsx
 import React from "react";
 
 export default function LocationInputs({
@@ -6,53 +5,54 @@ export default function LocationInputs({
   toValue,
   whenValue,
   whenOptions = ["Now"],
-  onFromChange = () => {},
-  onToChange = () => {},
   onWhenChange = () => {},
-  onClick
+  setClickedFrom,
+  setClickedTo,
 }) {
   return (
     <div className="space-y-4 mb-6">
-      {/* FROM */}
-      <div className="flex items-center bg-gray-200 rounded-lg overflow-hidden" onClick={onClick}>
-       {/* give every label the same fixed width */}
+      <div
+        className="flex items-center bg-gray-200 rounded-lg overflow-hidden cursor-pointer"
+        onClick={() => setClickedFrom(true)}
+      >
         <span className="w-20 px-4 text-xs font-medium text-gray-500 uppercase">
           From
         </span>
         <input
           type="text"
           value={fromValue}
-          onChange={e => onFromChange(e.target.value)}
           placeholder="Enter your location"
+          readOnly
           className="flex-1 bg-transparent p-3 text-sm placeholder-gray-500 focus:outline-none"
         />
       </div>
 
-      {/* TO */}
-      <div className="flex items-center bg-gray-200 rounded-lg overflow-hidden" onClick={onClick}>
+      <div
+        className="flex items-center bg-gray-200 rounded-lg overflow-hidden cursor-pointer"
+        onClick={() => setClickedTo(true)}
+      >
         <span className="w-20 px-4 text-xs font-medium text-gray-500 uppercase">
           To
         </span>
         <input
           type="text"
           value={toValue}
-          onChange={e => onToChange(e.target.value)}
           placeholder="Search for a locality or landmark"
+          readOnly
           className="flex-1 bg-transparent p-3 text-sm placeholder-gray-500 focus:outline-none"
         />
       </div>
 
-      {/* WHEN */}
       <div className="relative flex items-center bg-gray-200 rounded-lg overflow-hidden">
         <span className="w-20 px-4 text-xs font-medium text-gray-500 uppercase">
           When
         </span>
         <select
           value={whenValue}
-          onChange={e => onWhenChange(e.target.value)}
+          onChange={(e) => onWhenChange(e.target.value)}
           className="flex-1 appearance-none bg-transparent p-3 text-sm focus:outline-none"
         >
-          {whenOptions.map(opt => (
+          {whenOptions.map((opt) => (
             <option key={opt}>{opt}</option>
           ))}
         </select>
