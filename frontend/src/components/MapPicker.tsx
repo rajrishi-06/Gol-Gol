@@ -4,6 +4,7 @@ import mapboxgl from 'mapbox-gl';
 import axios from 'axios';
 import { Crosshair } from 'lucide-react';
 import 'mapbox-gl/dist/mapbox-gl.css';
+import { GeolocateControl } from 'mapbox-gl';
 
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_GL_API;
 
@@ -21,6 +22,7 @@ const MapPicker: React.FC<MapPickerProps> = ({ setLoc, setClickedLoc }) => {
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [didUserType, setDidUserType] = useState(false);
 
+const geolocateRef = useRef<GeolocateControl | null>(null);
   // Tooltip state
   const [tooltipVisible, setTooltipVisible] = useState(false);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
@@ -50,7 +52,7 @@ const MapPicker: React.FC<MapPickerProps> = ({ setLoc, setClickedLoc }) => {
             container: mapContainerRef.current!,
             style: 'mapbox://styles/mapbox/streets-v11',
             center: [lng, lat],
-            zoom: 12,
+            zoom: 13,
             maxBounds: [sw, ne],
             scrollZoom: { around: 'center' },
             touchZoomRotate: { around: 'center' },
@@ -209,6 +211,12 @@ const MapPicker: React.FC<MapPickerProps> = ({ setLoc, setClickedLoc }) => {
       }
     );
   };
+
+  // const handleCurrentLocation = () => {
+  //   if (geolocateRef.current) {
+  //     geolocateRef.current.trigger();
+  //   }
+  // };
 
   // Tooltip: show after 3s of no move, hide immediately on any move or leave
   const onMapMouseMove = (e: React.MouseEvent) => {
