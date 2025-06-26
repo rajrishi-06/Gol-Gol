@@ -10,14 +10,15 @@ import ProtectedRoute from './components/ProtectedRoute'
 
 function App() {
   let [logIn, setLogIn] = useState(false);
+  let[UserId,setUserId] = useState(null);
   return (
   <div>
   <Routes>
-    <Route path ="/" element ={<Getride logIn={logIn}/>}/>
+    <Route path ="/" element ={<Getride logIn={logIn} UserId={UserId} />}/>
 
-    <Route path ="/setride" element ={<Setride/>}/>
+    <Route path ="/setride" element ={<Setride  logIn={logIn} UserId={UserId} />}/>
 
-    <Route path ="/login" element ={<Login setLogIn={setLogIn} />}/>
+    <Route path="/login" element={<Login setLogIn={setLogIn} setUserId={setUserId} />} />
 
     <Route
         path="/dashboard"

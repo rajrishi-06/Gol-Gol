@@ -78,6 +78,7 @@ export default function Login(props) {
 
     localStorage.setItem("user_uuid", uuid);
     props.setLogIn?.(true);
+     props.setUserId?.(uuid); 
     navigate("/");
     // navigate("/", { state: { uuid } });
   };

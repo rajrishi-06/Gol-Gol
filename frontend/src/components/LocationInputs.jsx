@@ -1,5 +1,5 @@
 import React from "react";
-
+import { Navigate } from "react-router-dom"; 
 export default function LocationInputs({
   fromValue,
   toValue,
@@ -10,6 +10,9 @@ export default function LocationInputs({
   setClickedTo,
 }) {
   return (
+
+  
+
     <div className="space-y-4 mb-6">
       <div
         className="flex items-center bg-gray-200 rounded-lg overflow-hidden cursor-pointer"

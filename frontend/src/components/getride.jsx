@@ -9,19 +9,26 @@ function Getride(props) {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
 
+ 
+
   return (
     <div className="flex flex-col sm:flex-row h-screen">
+
       <LeftPanel
         logIn={props.logIn}
+        UserId={props.UserId}
         setClickedFrom={setClickedLocFrom}
         setClickedTo={setClickedLocTo}
         from={from}
         to={to}
       />
 
+
+
       {clickedLocFrom || clickedLocTo ? (
         <MapPicker
           setLoc={clickedLocFrom ? setFrom : setTo}
+           UserId={props.UserId} 
           setClickedLoc={clickedLocFrom ? setClickedLocFrom : setClickedLocTo}
         />
       ) : (

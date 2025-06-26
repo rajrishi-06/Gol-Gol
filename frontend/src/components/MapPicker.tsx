@@ -5,15 +5,17 @@ import axios from 'axios';
 import { Crosshair } from 'lucide-react';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { GeolocateControl } from 'mapbox-gl';
+import { supabase } from "../server/supabase";
 
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_GL_API;
 
 interface MapPickerProps {
   setLoc: (value: string) => void;
   setClickedLoc: (flag: boolean) => void;
+  UserId: string;
 }
 
-const MapPicker: React.FC<MapPickerProps> = ({ setLoc, setClickedLoc }) => {
+const MapPicker: React.FC<MapPickerProps> = ({ setLoc, setClickedLoc,UserId }) => {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
 
@@ -212,11 +214,7 @@ const geolocateRef = useRef<GeolocateControl | null>(null);
     );
   };
 
-  // const handleCurrentLocation = () => {
-  //   if (geolocateRef.current) {
-  //     geolocateRef.current.trigger();
-  //   }
-  // };
+ 
 
   // Tooltip: show after 3s of no move, hide immediately on any move or leave
   const onMapMouseMove = (e: React.MouseEvent) => {
@@ -244,12 +242,73 @@ const geolocateRef = useRef<GeolocateControl | null>(null);
     setTooltipVisible(false);
   };
 
-  const handleOk = () => {
-    // send the selected location back to parent
-    setLoc(searchInput);
-    // close the map
-    setClickedLoc(false);
-  };
+  // const handleOk = () => {
+      
+  //   setLoc(searchInput);
+  //   console.log('Location set:', coords);
+
+  //   setClickedLoc(false);
+  // };
+
+  
+
+const handleOk = async () => {
+  setLoc(searchInput);
+ 
+  setClickedLoc(false);
+
+  
+
+  if (!UserId || !coords.lat || !coords.lng) {
+   console.error("Missing user ID or coordinates");
+    return;
+  }
+
+  // Check if the user already has a location record
+  const { data: existing, error: fetchError } = await supabase
+    .from("userlive_loc")
+    .select("id")
+    .eq("user_id", UserId)
+    .single();
+
+  if (fetchError && fetchError.code !== "PGRST116") {
+    console.error("Fetch error:", fetchError);
+    return;
+  }
+
+  if (existing) {
+    //  Update existing location
+    const { error: updateError } = await supabase
+      .from("userlive_loc")
+      .update({
+        latitude: coords.lat,
+        longitude: coords.lng,
+      })
+      .eq("user_id", UserId);
+
+    if (updateError) {
+      console.error("Update error:", updateError);
+    } else {
+      console.log("Live location updated!");
+    }
+  } else {
+    //  Insert new location
+    const { error: insertError } = await supabase.from("userlive_loc").insert([
+      {
+        user_id: UserId,
+        latitude: coords.lat,
+        longitude: coords.lng,
+      },
+    ]);
+
+    if (insertError) {
+      console.error("Insert error:", insertError);
+    } else {
+      console.log("Live location inserted!");
+    }
+  }
+};
+
 
   return (
     <div className="hidden sm:block flex-1 h-screen relative">
