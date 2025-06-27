@@ -1,5 +1,5 @@
-// AvailableRides.jsx
 import React from "react";
+import { useNavigate } from "react-router-dom";
 
 const rides = [
   {
@@ -39,28 +39,22 @@ const rides = [
   },
 ];
 
-function RideItem({ icon, name, desc, eta }) {
+function RideItem({ icon, name, desc, eta, id, onClick }) {
   return (
-    <li className="flex items-center px-4 py-3 hover:bg-gray-50 transition-colors">
-      {/* Icon + ETA stacked */}
+    <li
+      className="flex items-center px-4 py-3 hover:bg-gray-50 transition-colors cursor-pointer"
+      onClick={() => onClick(id)} 
+    >
       <div className="flex flex-col items-center justify-center w-12">
         <div className="text-2xl">{icon}</div>
-        {eta && (
-          <span className="mt-1 text-xs text-gray-500">{eta}</span>
-        )}
+        {eta && <span className="mt-1 text-xs text-gray-500">{eta}</span>}
       </div>
 
-      {/* Text */}
       <div className="ml-4 flex-1">
-        <div className="text-base font-medium text-gray-900 mb-1">
-          {name}
-        </div>
-        <div className="text-sm text-gray-500 mt-0.5">
-          {desc}
-        </div>
+        <div className="text-base font-medium text-gray-900 mb-1">{name}</div>
+        <div className="text-sm text-gray-500 mt-0.5">{desc}</div>
       </div>
 
-      {/* Arrow */}
       <svg
         className="w-5 h-5 text-gray-400"
         fill="none"
@@ -78,7 +72,18 @@ function RideItem({ icon, name, desc, eta }) {
   );
 }
 
-export default function AvailableRides() {
+export default function AvailableRides({ UserId }) {
+  const navigate = useNavigate();
+
+  const handleClick = (rideId) => {
+    navigate("/conformride", {
+      state: {
+        userId: UserId,
+        rideId: rideId,
+      },
+    });
+  };
+
   return (
     <div className="mt-6">
       <h2 className="text-lg font-semibold text-gray-800 mb-3">
@@ -87,7 +92,7 @@ export default function AvailableRides() {
 
       <ul className="bg-white border border-gray-200 rounded-lg divide-y divide-gray-200 shadow-sm">
         {rides.map((r) => (
-          <RideItem key={r.id} {...r} />
+          <RideItem key={r.id} {...r} onClick={handleClick} />
         ))}
       </ul>
     </div>

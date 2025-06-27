@@ -7,7 +7,7 @@ import Login from './components/login'
 import Setride from './components/setride'
 import Dashboard from './components/Dashboard'
 import ProtectedRoute from './components/ProtectedRoute'
-
+import ConformRide from './components/conformride'
 function App() {
   let [logIn, setLogIn] = useState(false);
   let[UserId,setUserId] = useState(null);
@@ -20,6 +20,7 @@ function App() {
 
     <Route path="/login" element={<Login setLogIn={setLogIn} setUserId={setUserId} />} />
 
+<Route path ="/conformride" element ={<ConformRide  logIn={logIn}/>}/>
     <Route
         path="/dashboard"
         element={
