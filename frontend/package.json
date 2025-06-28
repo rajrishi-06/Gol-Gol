@@ -15,11 +15,15 @@
     "@supabase/supabase-js": "^2.50.0",
     "@tailwindcss/vite": "^4.1.10",
     "axios": "^1.10.0",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
     "lucide-react": "^0.522.0",
     "mapbox-gl": "^3.13.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-router-dom": "^7.6.2",
+    "socket.io": "^4.8.1",
+    "socket.io-client": "^4.8.1",
     "tailwindcss": "^4.1.10"
   },
   "devDependencies": {

@@ -2,7 +2,7 @@ import React from "react";
 import { Navigate } from "react-router-dom"; 
 import Navbar from "./Navbar";
 import LiveUserCar from "./LiveUserCar";
-
+import LiveMap from "./livemap";
 function Setride(props) {
   
   if (!props.UserId) {
@@ -14,6 +14,7 @@ function Setride(props) {
       {/* Left Panel */}
       <div className="w-full sm:w-[550px] h-screen p-6 bg-white overflow-auto border-r border-gray-200">
         <Navbar logIn={props.logIn} />
+        <LiveMap userType="driver" userId={props.UserId}/>
       </div>
 
       {/* Right Panel */}

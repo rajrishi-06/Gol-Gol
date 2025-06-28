@@ -2,7 +2,7 @@ import react from "react";
 import { useLocation } from "react-router-dom";
 import Navbar from "./Navbar";
 import { Navigate } from "react-router-dom"; 
-import LiveUser from "./LiveUser";
+import LiveMap from "./livemap";
 
 function ConformRide(props){
 
@@ -13,11 +13,12 @@ return(
       {/* Left Panel */}
       <div className="w-full sm:w-[550px] h-screen p-6 bg-white overflow-auto border-r border-gray-200">
         <Navbar logIn={props.logIn} />
+        
       </div>
 
       {/* Right Panel */}
       <div className="hidden sm:block flex-1 h-screen relative">
-        <LiveUser UserId={userId}/>
+        <LiveMap userType="rider" userId={props.UserId} /> 
       </div>
     </div>)
 };
