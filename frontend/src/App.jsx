@@ -8,11 +8,18 @@ import Setride from './components/setride'
 import Dashboard from './components/Dashboard'
 import ProtectedRoute from './components/ProtectedRoute'
 import ConformRide from './components/conformride'
+
+
 function App() {
   let [logIn, setLogIn] = useState(false);
   let[UserId,setUserId] = useState(null);
+
+
+   
+
   return (
   <div>
+
   <Routes>
     <Route path ="/" element ={<Getride logIn={logIn} UserId={UserId} />}/>
 
@@ -32,8 +39,8 @@ function App() {
 
   </Routes>
 
-</div>
-   
+
+   </div>
   )
 }
 
