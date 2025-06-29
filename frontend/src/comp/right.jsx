@@ -5,57 +5,79 @@ import { reverseGeocode } from "../hooks/useGeocode";
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_GL_API;
 mapboxgl.accessToken = MAPBOX_TOKEN;
 
-const RightMapPanel = ({ fromLocation, toLocation, setFromLocation, setToLocation }) => {
+const RightMapPanel = ({
+  fromLocation,
+  toLocation,
+  setFromLocation,
+  setToLocation,
+  activeInput, // <- either "from" or "to"
+}) => {
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const fromMarkerRef = useRef(null);
   const toMarkerRef = useRef(null);
-  const clickCountRef = useRef(0);
+  const activeInputRef = useRef(activeInput);
 
+  // Update ref whenever activeInput changes
   useEffect(() => {
-    mapInstanceRef.current = new mapboxgl.Map({
+    activeInputRef.current = activeInput;
+  }, [activeInput]);
+
+  // Initialize map once
+  useEffect(() => {
+    const map = new mapboxgl.Map({
       container: mapRef.current,
       style: "mapbox://styles/mapbox/streets-v11",
       center: [88.3639, 22.5726],
       zoom: 5.5,
     });
 
+    mapInstanceRef.current = map;
+
+    // Try getting user's current location
     navigator.geolocation.getCurrentPosition(async (pos) => {
       const { latitude, longitude } = pos.coords;
-      mapInstanceRef.current.setCenter([longitude, latitude]);
-      mapInstanceRef.current.setZoom(14);
+      map.setCenter([longitude, latitude]);
+      map.setZoom(14);
       const location = await reverseGeocode(latitude, longitude);
       setFromLocation(location);
       fromMarkerRef.current = new mapboxgl.Marker({ color: "green" })
         .setLngLat([longitude, latitude])
-        .addTo(mapInstanceRef.current);
+        .addTo(map);
     });
 
-    mapInstanceRef.current.on("click", async (e) => {
+    // Attach click listener
+    const handleMapClick = async (e) => {
       const { lng, lat } = e.lngLat;
       const location = await reverseGeocode(lat, lng);
+      const inputType = activeInputRef.current;
 
-      if (clickCountRef.current % 2 === 0) {
+      console.log("Map clicked:", inputType, location);
+
+      if (inputType === "from") {
         setFromLocation(location);
         if (fromMarkerRef.current) fromMarkerRef.current.remove();
         fromMarkerRef.current = new mapboxgl.Marker({ color: "green" })
           .setLngLat([lng, lat])
-          .addTo(mapInstanceRef.current);
-      } else {
+          .addTo(map);
+      } else if (inputType === "to") {
         setToLocation(location);
         if (toMarkerRef.current) toMarkerRef.current.remove();
         toMarkerRef.current = new mapboxgl.Marker({ color: "red" })
           .setLngLat([lng, lat])
-          .addTo(mapInstanceRef.current);
+          .addTo(map);
       }
-      clickCountRef.current++;
-    });
+    };
+
+    map.on("click", handleMapClick);
 
     return () => {
-      mapInstanceRef.current.remove();
+      map.off("click", handleMapClick);
+      map.remove();
     };
   }, []);
 
+  // Re-render from marker if location changes
   useEffect(() => {
     if (fromLocation && mapInstanceRef.current) {
       if (fromMarkerRef.current) fromMarkerRef.current.remove();
@@ -65,6 +87,7 @@ const RightMapPanel = ({ fromLocation, toLocation, setFromLocation, setToLocatio
     }
   }, [fromLocation]);
 
+  // Re-render to marker if location changes
   useEffect(() => {
     if (toLocation && mapInstanceRef.current) {
       if (toMarkerRef.current) toMarkerRef.current.remove();
@@ -78,4 +101,3 @@ const RightMapPanel = ({ fromLocation, toLocation, setFromLocation, setToLocatio
 };
 
 export default RightMapPanel;
-

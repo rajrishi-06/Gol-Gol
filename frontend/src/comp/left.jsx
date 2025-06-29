@@ -3,7 +3,7 @@ import { forwardGeocode, reverseGeocode } from "../hooks/useGeocode";
 import { useNavigate } from "react-router-dom";
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_GL_API;
 
-const LeftPanel = ({ fromLocation, toLocation, setFromLocation, setToLocation ,UserId}) => {
+const LeftPanel = ({ fromLocation, toLocation, setFromLocation, setToLocation ,UserId,setActiveInput}) => {
   const [fromInput, setFromInput] = useState("");
   const [toInput, setToInput] = useState("");
   const [fromSuggestions, setFromSuggestions] = useState([]);
@@ -90,6 +90,7 @@ const LeftPanel = ({ fromLocation, toLocation, setFromLocation, setToLocation ,U
   onChange={(e) => setFromInput(e.target.value)}
   onFocus={() => {
     if (!UserId) navigate("/login");
+   setActiveInput("from");
   }}
   onKeyDown={(e) => e.key === "Enter" && setFromSuggestions([])}
   placeholder="Enter pickup location"
@@ -132,6 +133,7 @@ const LeftPanel = ({ fromLocation, toLocation, setFromLocation, setToLocation ,U
   onChange={(e) => setToInput(e.target.value)}
   onFocus={() => {
     if (!UserId) navigate("/login");
+    setActiveInput("to");
   }}
   onKeyDown={(e) => e.key === "Enter" && setToSuggestions([])}
   placeholder="Enter drop location"

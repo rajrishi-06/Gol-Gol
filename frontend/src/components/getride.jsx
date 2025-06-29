@@ -17,7 +17,7 @@ function Getride(props) {
  
 const [fromLocation, setFromLocation] = useState(null);
   const [toLocation, setToLocation] = useState(null);
-
+const [activeInput, setActiveInput] = useState("");
   return (
 
     // <div className="flex flex-col sm:flex-row h-screen">
@@ -54,6 +54,7 @@ const [fromLocation, setFromLocation] = useState(null);
           setFromLocation={setFromLocation}
           setToLocation={setToLocation}
           UserId={props.UserId}
+          setActiveInput={setActiveInput}
         />
       </div>
 
@@ -64,6 +65,7 @@ const [fromLocation, setFromLocation] = useState(null);
           toLocation={toLocation}
           setFromLocation={setFromLocation}
           setToLocation={setToLocation}
+          activeInput={activeInput}
         />
       </div>
     </div>
