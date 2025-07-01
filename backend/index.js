@@ -1,38 +1,37 @@
 const express = require("express");
 const http = require("http");
-const cors = require("cors");
 const { Server } = require("socket.io");
+const cors = require("cors");
 
 const app = express();
 app.use(cors());
 
 const server = http.createServer(app);
-
 const io = new Server(server, {
   cors: {
-    origin: "*", // allow all origins in dev
-    methods: ["GET", "POST"]
+    origin: "http://localhost:5173", // Change to your frontend URL
+    methods: ["GET", "POST"],
   },
 });
 
 io.on("connection", (socket) => {
-  console.log("🟢 New user connected:", socket.id);
+  console.log("✅ User connected:", socket.id);
 
-  socket.on("driverLocation", (data) => {
-    console.log("📍 Driver Location Received:", data);
-    io.emit("updateDriverLocation", data);
+  socket.on("join", (userId) => {
+    console.log("Joined room:", userId);
+    socket.join(userId); // userId can be driver or passenger
   });
 
-  socket.on("riderLocation", (data) => {
-    console.log("🚶 Rider Location Received:", data);
-    io.emit("updateRiderLocation", data);
+  socket.on("driverLocation", ({ passengerId, lat, lng }) => {
+    console.log("Driver location update for passenger:", passengerId);
+    io.to(passengerId).emit(`driverLocation:${passengerId}`, { lat, lng });
   });
 
   socket.on("disconnect", () => {
-    console.log("🔴 User disconnected:", socket.id);
+    console.log("❌ Disconnected:", socket.id);
   });
 });
 
 server.listen(3001, () => {
-  console.log("🚀 Backend running on http://localhost:3001");
+  console.log("🚀 Server running on http://localhost:3001");
 });

@@ -2,12 +2,15 @@ import react from "react";
 import { useLocation } from "react-router-dom";
 import Navbar from "./Navbar";
 import { Navigate } from "react-router-dom"; 
-import LiveMap from "./livemap";
+import { useState, useEffect } from "react";
+
+import RideTrackingMap from "../comp/RideTrackingMap";
 
 function ConformRide(props){
 
     const location = useLocation();
   const { userId, rideId } = location.state || {};
+ 
 return(
  <div className="flex flex-col sm:flex-row h-screen">
       {/* Left Panel */}
@@ -18,7 +21,7 @@ return(
 
       {/* Right Panel */}
       <div className="hidden sm:block flex-1 h-screen relative">
-        <LiveMap userType="rider" userId={props.UserId} /> 
+        <RideTrackingMap userId={userId} userType="user" />
       </div>
     </div>)
 };

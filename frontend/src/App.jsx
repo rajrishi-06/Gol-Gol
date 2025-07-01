@@ -9,7 +9,7 @@ import Dashboard from './components/Dashboard'
 import ProtectedRoute from './components/ProtectedRoute'
 import ConformRide from './components/conformride'
 
-import MatchRidersToDrivers from "./trail/MatchRidersToDrivers";
+import AcceptRide from './components/acceptride' ;
 
 function App() {
   let [logIn, setLogIn] = useState(false);
@@ -19,32 +19,35 @@ function App() {
    
 
   return (
-//   <div>
+  <div>
 
-//   <Routes>
-//     <Route path ="/" element ={<Getride logIn={logIn} UserId={UserId} />}/>
+  <Routes>
+    <Route path ="/" element ={<Getride logIn={logIn} UserId={UserId} />}/>
 
-//     <Route path ="/setride" element ={<Setride  logIn={logIn} UserId={UserId} />}/>
+    <Route path ="/setride" element ={<Setride  logIn={logIn} UserId={UserId} />}/>
 
-//     <Route path="/login" element={<Login setLogIn={setLogIn} setUserId={setUserId} />} />
+    <Route path="/login" element={<Login setLogIn={setLogIn} setUserId={setUserId} />} />
 
-// <Route path ="/conformride" element ={<ConformRide  logIn={logIn} UserId={UserId}/>}/>
-//     <Route
-//         path="/dashboard"
-//         element={
-//           <ProtectedRoute logIn={logIn}>
-//             <Dashboard setLogIn={setLogIn} />
-//           </ProtectedRoute>
-//         }
-//       />
+<Route path ="/conformride" element ={<ConformRide  logIn={logIn} UserId={UserId}/>}/>
 
-//   </Routes>
+<Route path ="/acceptride" element ={<AcceptRide />}/>
+
+    <Route
+        path="/dashboard"
+        element={
+          <ProtectedRoute logIn={logIn}>
+            <Dashboard setLogIn={setLogIn} />
+          </ProtectedRoute>
+        }
+      />
+
+  </Routes>
 
 
 
-//    </div>
-   <MatchRidersToDrivers />
-  )
+   </div>
+   
+  );
 }
 
 export default App;

@@ -1,8 +1,9 @@
 import React from "react";
 import { Navigate } from "react-router-dom"; 
 import Navbar from "./Navbar";
-import LiveUserCar from "./LiveUserCar";
-import LiveMap from "./livemap";
+
+import DriverMap from "../comp/driver_map";
+import NearbyRequests from "../comp/NearbyRequests";
 function Setride(props) {
   
   if (!props.UserId) {
@@ -10,17 +11,23 @@ function Setride(props) {
   }
 
   return (
-    <div className="flex flex-col sm:flex-row h-screen">
-      {/* Left Panel */}
+     <div className="flex flex-col sm:flex-row h-screen">
+    
       <div className="w-full sm:w-[550px] h-screen p-6 bg-white overflow-auto border-r border-gray-200">
-        <Navbar logIn={props.logIn} />
-        <LiveMap userType="driver" userId={props.UserId}/>
+       <Navbar logIn={props.logIn} />
+     
+
+        <NearbyRequests  UserId={props.UserId}/>
       </div>
 
-      {/* Right Panel */}
+    
+
       <div className="hidden sm:block flex-1 h-screen relative">
-        <LiveUserCar UserId={props.UserId}/>
-      </div>
+
+      <DriverMap/>
+      
+     </div>
+ 
     </div>
   );
 }
