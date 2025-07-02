@@ -11,6 +11,8 @@ import ConformRide from './components/conformride'
 
 import AcceptRide from './components/acceptride' ;
 
+
+
 function App() {
   let [logIn, setLogIn] = useState(false);
   let[UserId,setUserId] = useState(null);
@@ -30,7 +32,7 @@ function App() {
 
 <Route path ="/conformride" element ={<ConformRide  logIn={logIn} UserId={UserId}/>}/>
 
-<Route path ="/acceptride" element ={<AcceptRide />}/>
+<Route path ="/acceptride" element ={<AcceptRide UserId={UserId} />}/>
 
     <Route
         path="/dashboard"
@@ -40,6 +42,9 @@ function App() {
           </ProtectedRoute>
         }
       />
+
+
+
 
   </Routes>
 

@@ -66,14 +66,37 @@ const NearbyRequests = ({UserId}) => {
     fetchRequests();
   }, [userLocation]);
 
-  const handleAcceptRide = (req) => {
-  alert(`Accepted ride request by user ID: ${req.user_id}`);
+  const handleAcceptRide = async (req) => {
+  const { error } = await supabase
+  .from("progress_req")
+  .upsert(
+    {
+      user_id: req.user_id,
+      driver_id: UserId,
+      pick_lat: req.pick_lat,
+      pick_lng: req.pick_lng,
+      drop_lat: req.drop_lat,
+      drop_lng: req.drop_lng,
+    },
+    { onConflict: ['user_id'] } // 👈 ensure 'user_id' is unique in your table
+  );
+
+  if (error) {
+    console.error("Error inserting into progress_req:", error.message);
+    alert("Failed to accept ride. Please try again.");
+    return;
+  }
+
+  alert(`✅ Ride accepted!`);
   navigate("/acceptride", {
     state: {
       user_id: req.user_id,
+      driver_id: UserId,
+      ride_id: req.ride_id,
     },
   });
 };
+
 
   if (loading) return <div className="p-4">🔄 Loading nearby requests...</div>;
 

@@ -1,37 +1,32 @@
-const express = require("express");
-const http = require("http");
-const { Server } = require("socket.io");
-const cors = require("cors");
+
+import express from "express";
+import { createServer } from "http";
+import { Server } from "socket.io";
+import cors from "cors";
 
 const app = express();
 app.use(cors());
-
-const server = http.createServer(app);
+const server = createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: "http://localhost:5173", // Change to your frontend URL
-    methods: ["GET", "POST"],
+    origin: "*",
   },
 });
 
 io.on("connection", (socket) => {
-  console.log("✅ User connected:", socket.id);
+  console.log("User connected:", socket.id);
 
-  socket.on("join", (userId) => {
-    console.log("Joined room:", userId);
-    socket.join(userId); // userId can be driver or passenger
+  socket.on("join-room", (deliveryId) => {
+    socket.join(deliveryId);
   });
 
-  socket.on("driverLocation", ({ passengerId, lat, lng }) => {
-    console.log("Driver location update for passenger:", passengerId);
-    io.to(passengerId).emit(`driverLocation:${passengerId}`, { lat, lng });
+  socket.on("location-update", ({ deliveryId, coords }) => {
+    socket.to(deliveryId).emit("location-update", { coords });
   });
 
   socket.on("disconnect", () => {
-    console.log("❌ Disconnected:", socket.id);
+    console.log("User disconnected:", socket.id);
   });
 });
 
-server.listen(3001, () => {
-  console.log("🚀 Server running on http://localhost:3001");
-});
+server.listen(3001, () => console.log("Socket server on port 3001"));
