@@ -1,8 +1,11 @@
-import React, { useEffect, useState } from "react";
+import React, { use, useEffect, useState } from "react";
 import { supabase } from "../server/supabase";
 import { reverseGeocode } from "../hooks/useGeocode";
 import { getDistance } from "geolib";
 import { useNavigate } from "react-router-dom";
+
+import { io } from "socket.io-client"; 
+const socket = io("http://localhost:3001");
 
 const MAX_DISTANCE_KM = 20;
 
@@ -77,6 +80,7 @@ const NearbyRequests = ({UserId}) => {
       pick_lng: req.pick_lng,
       drop_lat: req.drop_lat,
       drop_lng: req.drop_lng,
+      otp:Math.floor(1000 + Math.random() * 9000), // Generate a random 6-digit OTP
     },
     { onConflict: ['user_id'] } // 👈 ensure 'user_id' is unique in your table
   );
@@ -95,6 +99,10 @@ const NearbyRequests = ({UserId}) => {
       ride_id: req.ride_id,
     },
   });
+const con=true;
+
+socket.emit("ride_accepted", { userId: req.user_id, accepted: true });
+  
 };
 
 
