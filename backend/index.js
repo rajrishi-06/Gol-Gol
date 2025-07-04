@@ -21,23 +21,21 @@ io.on("connection", (socket) => {
   });
 
   socket.on("location-update", ({ deliveryId, coords }) => {
+    console.log("📍 Location update for deliveryId:", deliveryId, "Coords:", coords);
     socket.to(deliveryId).emit("location-update", { coords });
   });
+
+
+socket.on("ride_started", ({ toUserId }) => {
+  console.log("📤 Notifying user:", toUserId);
+  io.to(toUserId).emit("ride_started");
+});
 
   socket.on("disconnect", () => {
     console.log("User disconnected:", socket.id);
   });
 
-  socket.on("ride_accepted", ({ userId, accepted }) => {
-    socket.to(userId).emit("ride_accepted", { accepted });
-    console.log(`Ride accepted by user ${userId}: ${accepted}`);
-  });
-
-  socket.on("ride_accepted", ({ userId }) => {
-    console.log(`🚖 Ride accepted by driver for user ${userId}`);
  
-    io.to(userId).emit("driver_accepted", { accepted: true });
-  });
 });
 
 server.listen(3001, () => console.log("Socket server on port 3001"));

@@ -80,7 +80,7 @@ const NearbyRequests = ({UserId}) => {
       pick_lng: req.pick_lng,
       drop_lat: req.drop_lat,
       drop_lng: req.drop_lng,
-      otp:Math.floor(1000 + Math.random() * 9000), // Generate a random 6-digit OTP
+      otp:Math.floor(1000 + Math.random() * 9000), // Generate a random 4-digit OTP
     },
     { onConflict: ['user_id'] } // 👈 ensure 'user_id' is unique in your table
   );

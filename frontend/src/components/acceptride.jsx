@@ -69,15 +69,9 @@ const handleOtpSubmit = async () => {
       setPickupLocation({ lat: dropData.drop_lat, lng: dropData.drop_lng });
       setRideStarted(true);
 
-      // ✅ Update ride_started to trigger user's listener
-      const { error: updateError } = await supabase
-        .from("progress_req")
-        .update({ ride_started: true })
-        .eq("user_id", user_id);
-
-      if (updateError) {
-        console.error("Error updating ride_started:", updateError.message);
-      }
+ socket.emit("ride_started", {
+  toUserId: user_id
+});
 
       console.log("📍 Switched to drop location:", dropData);
     }
