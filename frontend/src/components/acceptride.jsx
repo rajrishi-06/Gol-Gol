@@ -1,15 +1,17 @@
 
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import React, { useEffect, useState } from "react";
 import Navbar from "./Navbar";
 import Delivery from "../livecomp/Delivery";
 import { supabase } from "../server/supabase";
+import ChatBox from "../comp/chatbox";
+import { io } from "socket.io-client";
 
-import { io } from "socket.io-client"; 
 const socket = io("http://localhost:3001");
 
 const AcceptRide = (props) => {
   const location = useLocation();
+  const navigate = useNavigate();
   const { user_id, driver_id, ride_id } = location.state || {};
 
   const [pickupLocation, setPickupLocation] = useState(null);
@@ -18,7 +20,24 @@ const AcceptRide = (props) => {
   const [enteredOtp, setEnteredOtp] = useState("");
   const [otpError, setOtpError] = useState("");
   const [rideStarted, setRideStarted] = useState(false);
+  const [drop, setDrop] = useState(false); // controls Delivery mode
 
+  // 🔔 Listen for ride_completed event
+  useEffect(() => {
+
+socket.emit("join-room", driver_id);
+
+    socket.on("ride_completed", () => {
+      alert("✅ Ride completed!");
+      navigate("/setride");
+    });
+
+    return () => {
+      socket.off("ride_completed");
+    };
+  }, [navigate]);
+
+  // 📦 Get pickup info
   useEffect(() => {
     const fetchPickupLocation = async () => {
       if (!ride_id || !driver_id) return;
@@ -36,7 +55,7 @@ const AcceptRide = (props) => {
 
       if (data) {
         setPickupLocation({ lat: data.pick_lat, lng: data.pick_lng });
-        setOtp(data.otp); // store actual OTP
+        setOtp(data.otp);
         setLoading(false);
       }
     };
@@ -44,42 +63,44 @@ const AcceptRide = (props) => {
     fetchPickupLocation();
   }, [ride_id, driver_id]);
 
-const handleOtpSubmit = async () => {
-  if (enteredOtp.trim() === otp?.toString()) {
-    setOtpError("");
+  // 🔑 Handle OTP Submission
+  const handleOtpSubmit = async () => {
+    if (enteredOtp.trim() === otp?.toString()) {
+      setOtpError("");
 
-    const { error: deleteError } = await supabase
-      .from("pending_req")
-      .delete()
-      .eq("user_id", user_id);
+      // Delete from pending_req
+      const { error: deleteError } = await supabase
+        .from("pending_req")
+        .delete()
+        .eq("user_id", user_id);
 
-    if (deleteError) {
-      console.error("Error deleting from pending_req:", deleteError.message);
+      if (deleteError) {
+        console.error("Error deleting from pending_req:", deleteError.message);
+      }
+
+      // Get drop location
+      const { data: dropData, error: dropError } = await supabase
+        .from("progress_req")
+        .select("drop_lat, drop_lng")
+        .eq("driver_id", driver_id)
+        .single();
+
+      if (dropError) {
+        console.error("Error fetching drop location:", dropError.message);
+      } else if (dropData) {
+        setPickupLocation({ lat: dropData.drop_lat, lng: dropData.drop_lng });
+        setRideStarted(true);
+        setDrop(true);
+
+        // Notify user ride started
+        socket.emit("ride_started", { toUserId: user_id });
+
+        console.log("📍 Switched to drop location:", dropData);
+      }
+    } else {
+      setOtpError("❌ Wrong OTP! Please try again.");
     }
-
-    const { data: dropData, error: dropError } = await supabase
-      .from("progress_req")
-      .select("drop_lat, drop_lng")
-      .eq("driver_id", driver_id)
-      .single();
-
-    if (dropError) {
-      console.error("Error fetching drop location:", dropError.message);
-    } else if (dropData) {
-      setPickupLocation({ lat: dropData.drop_lat, lng: dropData.drop_lng });
-      setRideStarted(true);
-
- socket.emit("ride_started", {
-  toUserId: user_id
-});
-
-      console.log("📍 Switched to drop location:", dropData);
-    }
-  } else {
-    setOtpError("❌ Wrong OTP! Please try again.");
-  }
-};
-
+  };
 
   return (
     <div className="flex flex-col sm:flex-row h-screen">
@@ -122,6 +143,7 @@ const handleOtpSubmit = async () => {
             </p>
           </div>
         )}
+        <ChatBox fromId={driver_id} toId={user_id} />
       </div>
 
       {/* Right Panel */}
@@ -129,7 +151,7 @@ const handleOtpSubmit = async () => {
         {loading ? (
           <div className="text-center mt-10 text-lg font-semibold">Loading map...</div>
         ) : (
-          <Delivery deliveryId={user_id} pickupLocation={pickupLocation} />
+          <Delivery deliveryId={user_id} pickupLocation={pickupLocation} drop={drop} />
         )}
       </div>
     </div>
@@ -137,4 +159,3 @@ const handleOtpSubmit = async () => {
 };
 
 export default AcceptRide;
-

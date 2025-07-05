@@ -32,7 +32,7 @@ function App() {
 
 <Route path ="/conformride" element ={<ConformRide  logIn={logIn} UserId={UserId}/>}/>
 
-<Route path ="/acceptride" element ={<AcceptRide UserId={UserId} />}/>
+<Route path ="/acceptride" element ={<AcceptRide UserId={UserId} logIn={logIn}  />}/>
 
     <Route
         path="/dashboard"

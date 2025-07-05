@@ -151,7 +151,7 @@ const CustomerApp = ({ deliveryId, dropLocation }) => {
       container: mapRef.current,
       style: "mapbox://styles/mapbox/streets-v12",
       center: [dropLocation.lng, dropLocation.lat],
-      zoom: 13,
+      zoom: 14,
     });
 
     setMap(mapInstance);
