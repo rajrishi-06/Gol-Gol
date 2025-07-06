@@ -46,42 +46,53 @@ export default function Login(props) {
   }, [step]);
 
   // Verify OTP, then write or fetch user and log in
-  const handleVerify = async () => {
-    if (otp !== validotp) {
-      return alert("Wrong OTP. Please try again.");
+const handleVerify = async () => {
+  if (otp !== validotp) {
+    return alert("Wrong OTP. Please try again.");
+  }
+
+  let uuid;
+
+  if (isNewUser) {
+    const { data, error } = await supabase
+      .from("users")
+      .insert([{ mobile: phone, name, email }])
+      .select("id")
+      .single();
+
+    if (error) {
+      console.error("Registration insert error:", error);
+      return alert("Failed to create account.");
     }
 
-    let uuid;
-    if (isNewUser) {
-      const { data, error } = await supabase
-        .from("users")
-        .insert([{ mobile: phone, name, email }])
-        .select("id")
-        .single();
-      if (error) {
-        console.error("Registration insert error:", error);
-        return alert("Failed to create account.");
-      }
-      uuid = data.id;
-    } else {
-      const { data, error } = await supabase
-        .from("users")
-        .select("id")
-        .eq("mobile", phone)
-        .single();
-      if (error) {
-        console.error("Fetch UUID error:", error);
-        return alert("Failed to fetch user data.");
-      }
-      uuid = data.id;
+    uuid = data.id;
+  } else {
+    const { data, error } = await supabase
+      .from("users")
+      .select("id")
+      .eq("mobile", phone)
+      .single();
+
+    if (error) {
+      console.error("Fetch UUID error:", error);
+      return alert("Failed to fetch user data.");
     }
 
-    localStorage.setItem("user_uuid", uuid);
-    props.setLogIn?.(true);
-     props.setUserId?.(uuid); 
-    navigate("/");
-    // navigate("/", { state: { uuid } });
-  };
+    uuid = data.id;
+  }
+
+  // ✅ Save login state and user ID to localStorage
+  localStorage.setItem("logIn", "true");
+  localStorage.setItem("UserId", uuid);
+
+  // ✅ Update parent state (if passed from props)
+  props.setLogIn?.(true);
+  props.setUserId?.(uuid);
+
+  // ✅ Navigate to homepage
+  navigate("/");
+};
+
 
   // Continue from registration to OTP
   const handleRegistrationContinue = () => {

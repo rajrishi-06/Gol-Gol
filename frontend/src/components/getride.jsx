@@ -20,30 +20,6 @@ const [fromLocation, setFromLocation] = useState(null);
 const [activeInput, setActiveInput] = useState("");
   return (
 
-    // <div className="flex flex-col sm:flex-row h-screen">
-
-    //   <LeftPanel
-    //     logIn={props.logIn}
-    //     UserId={props.UserId}
-    //     setClickedFrom={setClickedLocFrom}
-    //     setClickedTo={setClickedLocTo}
-    //     from={from}
-    //     to={to}
-    //   />
-
-
-
-    //   {clickedLocFrom || clickedLocTo ? (
-    //     <MapPicker
-    //       setLoc={clickedLocFrom ? setFrom : setTo}
-    //        UserId={props.UserId} 
-    //       setClickedLoc={clickedLocFrom ? setClickedLocFrom : setClickedLocTo}
-    //     />
-    //   ) : (
-    //     <RightPanel />
-    //   )}
-    // </div>
-
 <div className="flex flex-col sm:flex-row h-screen">
       
       <div className="w-full sm:w-[550px] h-screen p-6 bg-white overflow-auto border-r border-gray-200">

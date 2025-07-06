@@ -11,11 +11,19 @@ import ConformRide from './components/conformride'
 
 import AcceptRide from './components/acceptride' ;
 
+import Findride from './matchingcomp/findride';
+import Publishride from './matchingcomp/publishride';
+
 
 
 function App() {
-  let [logIn, setLogIn] = useState(false);
-  let[UserId,setUserId] = useState(null);
+  const [logIn, setLogIn] = useState(() => {
+  return localStorage.getItem("logIn") === "true";
+});
+
+const [UserId, setUserId] = useState(() => {
+  return localStorage.getItem("UserId");
+});
 
 
    
@@ -27,6 +35,10 @@ function App() {
     <Route path ="/" element ={<Getride logIn={logIn} UserId={UserId} />}/>
 
     <Route path ="/setride" element ={<Setride  logIn={logIn} UserId={UserId} />}/>
+
+    <Route path="/findride" element={<Findride logIn={logIn} UserId={UserId} />} />
+
+<Route path="/publishride" element={<Publishride logIn={logIn} UserId={UserId} />} />
 
     <Route path="/login" element={<Login setLogIn={setLogIn} setUserId={setUserId} />} />
 
