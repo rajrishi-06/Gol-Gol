@@ -4,6 +4,8 @@ import React, { useState, useEffect } from "react";
 import LeftPanel from "./leftpanel";
 import RightMapPanel from "../comp/right";
 
+
+
 import { io } from "socket.io-client";
 const socket = io("http://localhost:3001");
 
@@ -54,6 +56,7 @@ const UserId = props.UserId;
           setActiveInput={setActiveInput}
           Usertype={"rider"}
         />
+
       </div>
 
    

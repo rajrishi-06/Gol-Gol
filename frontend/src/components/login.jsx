@@ -81,9 +81,8 @@ const handleVerify = async () => {
     uuid = data.id;
   }
 
-  // ✅ Save login state and user ID to localStorage
-  localStorage.setItem("logIn", "true");
-  localStorage.setItem("UserId", uuid);
+sessionStorage.setItem("logIn", "true");
+sessionStorage.setItem("UserId", uuid);
 
   // ✅ Update parent state (if passed from props)
   props.setLogIn?.(true);
