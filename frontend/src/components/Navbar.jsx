@@ -48,7 +48,7 @@ export default function Navbar(props) {
 
 
         {/* Login Button */}
-        {!props.logIn ? <div className="absolute right-4">
+        {!props.UserId ? <div className="absolute right-4">
           <button onClick={handelClickLogin}  className="text-sm text-gray-600 hover:text-black focus:outline-none">
             LOG IN
           </button>

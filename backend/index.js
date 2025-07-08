@@ -125,18 +125,22 @@ io.on("connection", (socket) => {
 });
 
 async function deleteExpiredRides() {
-  const now = new Date().toISOString();
-  const { error } = await supabase
-    .from('route_req')
-    .delete()
-    .lt('time', now);
+  const now = new Date();
+console.log("checked");
+  const { data, error, count } = await supabase
+    .from("route_req")
+    .delete({ count: "exact" }) // get number of rows deleted
+    .lt("time", now.toISOString());
 
-  if (error) console.error("❌ Error cleaning rides:", error.message);
-  else console.log("✅ Cleaned up at:", now);
+  if (error) {
+    console.error("❌ Error cleaning expired rides:", error.message);
+  } else {
+    console.log(`🧹 Deleted ${count} expired route_req entries at ${now.toISOString()}`);
+  }
 }
 
 
-cron.schedule('*/5 * * * *', deleteExpiredRides);
+cron.schedule("* * * * *", deleteExpiredRides); 
 
 
 

@@ -222,3 +222,5 @@ const handleRideSelect = async (rideId) => {
 };
 
 export default LeftPanel;
+
+

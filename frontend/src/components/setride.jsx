@@ -14,7 +14,7 @@ function Setride(props) {
      <div className="flex flex-col sm:flex-row h-screen">
     
       <div className="w-full sm:w-[550px] h-screen p-6 bg-white overflow-auto border-r border-gray-200">
-       <Navbar logIn={props.logIn} />
+       <Navbar logIn={props.logIn} UserId={props.UserId} />
      
 
         <NearbyRequests  UserId={props.UserId}/>
