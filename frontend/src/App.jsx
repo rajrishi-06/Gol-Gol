@@ -32,7 +32,7 @@ const [UserId, setUserId] = useState(() => {
   <div>
 
   <Routes>
-    <Route path ="/" element ={<Getride logIn={logIn} UserId={UserId} />}/>
+     <Route path ="/" element ={<Getride logIn={logIn} UserId={UserId} />}/>
 
     <Route path ="/setride" element ={<Setride  logIn={logIn} UserId={UserId} />}/>
 
@@ -46,8 +46,8 @@ const [UserId, setUserId] = useState(() => {
 
 <Route path ="/acceptride" element ={<AcceptRide UserId={UserId} logIn={logIn}  />}/>
 
-  
-
+ 
+ 
     <Route
         path="/dashboard"
         element={
@@ -55,7 +55,8 @@ const [UserId, setUserId] = useState(() => {
             <Dashboard setLogIn={setLogIn} />
           </ProtectedRoute>
         }
-      />
+      /> 
+
 
 
 

@@ -277,7 +277,7 @@ import { supabase } from "../server/supabase";
 
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_GL_API;
 
-const LeftPanel = ({ UserId, setActiveInput, setFromLocation, setToLocation, fromLocation, toLocation, Usertype }) => {
+const LeftPanel = ({ UserId, setActiveInput, setFromLocation, setToLocation, fromLocation, toLocation, Usertype ,setSelectedMatchId}) => {
   const [fromInput, setFromInput] = useState("");
   const [toInput, setToInput] = useState("");
   const [fromSuggestions, setFromSuggestions] = useState([]);
@@ -331,10 +331,15 @@ useEffect(() => {
   const checkMatched = async () => {
     if (!UserId) return;
 
-    const { data, error } = await supabase
-      .from("matched_routes")
-      .select("*")
-      .or(`user_id.eq.${UserId},driver_id.eq.${UserId}`);
+ let query = supabase.from("matched_routes").select("*");
+
+if (Usertype === "rider") {
+  query = query.eq("user_id", UserId);
+} else if (Usertype === "driver") {
+  query = query.eq("driver_id", UserId);
+}
+
+const { data, error } = await query;
 
     if (error) {
       console.error("❌ Failed to fetch matched_routes:", error.message);
@@ -353,6 +358,7 @@ useEffect(() => {
           : `${entry.driver_end_lat.toFixed(4)}, ${entry.driver_end_lng.toFixed(4)}`;
 
         return {
+           id: entry.id,
           user_id: matchedUserId,
           type: isDriver ? "rider" : "driver",
           from: matchedFrom,
@@ -494,9 +500,8 @@ useEffect(() => {
 
 const handleMatchClick = (match) => {
   console.log("🔍 Match clicked:", match);
-  // Navigate to a detailed view or perform an action
-  // Example: navigate(`/ride/${match.user_id}`);
-
+  alert(match.id);
+  setSelectedMatchId(match.id );
 };
 
 

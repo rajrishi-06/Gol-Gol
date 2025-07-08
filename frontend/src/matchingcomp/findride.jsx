@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import LeftPanel from "./leftpanel";
 import RightMapPanel from "../comp/right";
 
-
+import MatchedRouteMap from "./MatchedRouteMap";
 
 import { io } from "socket.io-client";
 const socket = io("http://localhost:3001");
@@ -16,6 +16,7 @@ function Findride(props) {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
 
+  const [selectedMatchId, setSelectedMatchId] = useState(null);
  
 const [fromLocation, setFromLocation] = useState(null);
   const [toLocation, setToLocation] = useState(null);
@@ -55,19 +56,26 @@ const UserId = props.UserId;
           UserId={props.UserId}
           setActiveInput={setActiveInput}
           Usertype={"rider"}
+  setSelectedMatchId={setSelectedMatchId}
         />
 
       </div>
 
    
       <div className="hidden sm:block flex-1 h-screen relative">
-       <RightMapPanel
+      
+      {selectedMatchId ? (
+  <MatchedRouteMap routeId={selectedMatchId} />
+) : (
+ <RightMapPanel
           fromLocation={fromLocation}
           toLocation={toLocation}
           setFromLocation={setFromLocation}
           setToLocation={setToLocation}
           activeInput={activeInput}
         />
+)}
+     
       </div>
     </div>
 
