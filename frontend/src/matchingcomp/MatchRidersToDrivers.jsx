@@ -50,7 +50,7 @@ export default function MatchRidersToDrivers() {
     async function matchAllRiders() {
       // 🧍‍♂️ Step 1: Fetch all riders
       const { data: riders, error: riderError } = await supabase
-        .from("route_requests")
+        .from("route_req")
         .select("*")
         .eq("user_type", "rider");
 
@@ -61,7 +61,7 @@ export default function MatchRidersToDrivers() {
 
       // 🚗 Step 2: Fetch all drivers
       const { data: drivers, error: driverError } = await supabase
-        .from("route_requests")
+        .from("route_req")
         .select("*")
         .eq("user_type", "driver");
 
@@ -100,7 +100,7 @@ export default function MatchRidersToDrivers() {
             }
           } else {
             // 🌍 Long route: use extended GPS tolerance (30km)
-            const EXTENDED_TOLERANCE = 30000;
+            const EXTENDED_TOLERANCE = Math.min(30000, Math.max(500, distanceKm * 50)); 
             startIndex = findClosestIndex(route, riderStart, EXTENDED_TOLERANCE);
             endIndex = findClosestIndex(route, riderEnd, EXTENDED_TOLERANCE);
 
@@ -119,3 +119,12 @@ export default function MatchRidersToDrivers() {
 
   return <div className="p-4 text-white">Matching all Riders with Drivers...</div>;
 }
+
+
+
+
+
+
+
+
+

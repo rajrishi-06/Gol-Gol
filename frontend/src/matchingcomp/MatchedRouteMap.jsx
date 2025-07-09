@@ -27,8 +27,8 @@ function MatchedRouteMap({ routeId }) {
 
       const driverStart = [data.driver_start_lng, data.driver_start_lat];
       const driverEnd = [data.driver_end_lng, data.driver_end_lat];
-      const riderStart = [data.user_start_lng, data.user_start_lat];
-      const riderEnd = [data.user_end_lng, data.user_end_lat];
+      const riderStart = [data.rider_start_lng, data.rider_start_lat];
+      const riderEnd = [data.rider_end_lng, data.rider_end_lat];
 
       // Fetch routes
       const fetchRoute = async (start, end) => {
@@ -49,97 +49,110 @@ function MatchedRouteMap({ routeId }) {
   }, [routeId]);
 
   // Render map with paths
-  useEffect(() => {
-    if (!driverRoute || !riderRoute) return;
+ useEffect(() => {
+  if (!driverRoute || !riderRoute || !mapContainer.current) return;
 
-    mapRef.current = new mapboxgl.Map({
-      container: mapContainer.current,
-      style: "mapbox://styles/mapbox/streets-v11",
-      center: driverRoute[0],
-      zoom: 14,
+  const map = new mapboxgl.Map({
+    container: mapContainer.current,
+    style: "mapbox://styles/mapbox/streets-v11",
+    center: driverRoute[0],
+    zoom: 14,
+  });
+
+  mapRef.current = map;
+
+  map.on("load", () => {
+    // Add driver route
+    map.addSource("driver-route", {
+      type: "geojson",
+      data: {
+        type: "Feature",
+        geometry: {
+          type: "LineString",
+          coordinates: driverRoute,
+        },
+      },
     });
 
-    const map = mapRef.current;
-
-    map.on("load", () => {
-      // Add both routes as sources
-      map.addSource("driver-route", {
-        type: "geojson",
-        data: {
-          type: "Feature",
-          geometry: {
-            type: "LineString",
-            coordinates: driverRoute,
-          },
-        },
-      });
-
-      map.addLayer({
-        id: "driver-route-line",
-        type: "line",
-        source: "driver-route",
-        layout: { "line-join": "round", "line-cap": "round" },
-        paint: {
-          "line-color": "#1E90FF",
-          "line-width": 4,
-        },
-      });
-
-      map.addSource("rider-route", {
-        type: "geojson",
-        data: {
-          type: "Feature",
-          geometry: {
-            type: "LineString",
-            coordinates: riderRoute,
-          },
-        },
-      });
-
-      map.addLayer({
-        id: "rider-route-line",
-        type: "line",
-        source: "rider-route",
-        layout: { "line-join": "round", "line-cap": "round" },
-        paint: {
-          "line-color": "#FF4500",
-          "line-width": 4,
-        },
-      });
-
-      // Add markers at start and end points
-     // Add colored markers
-const markers = [
-  { coords: driverRoute[0], color: "#1E90FF", label: "Driver Start" },
-  { coords: driverRoute.at(-1), color: "#1E90FF", label: "Driver End" },
-  { coords: riderRoute[0], color: "#FF4500", label: "Rider Start" },
-  { coords: riderRoute.at(-1), color: "#FF4500", label: "Rider End" },
-];
-
-markers.forEach(({ coords, color, label }) => {
-  const el = document.createElement("div");
-  el.style.backgroundColor = color;
-  el.style.width = "15px";
-  el.style.height = "15px";
-  el.style.borderRadius = "50%";
-  el.style.border = "2px solid white";
-  el.title = label;
-
-  new mapboxgl.Marker(el).setLngLat(coords).addTo(map);
-});
-
+    map.addLayer({
+      id: "driver-route-line",
+      type: "line",
+      source: "driver-route",
+      layout: { "line-join": "round", "line-cap": "round" },
+      paint: {
+        "line-color": "#1E90FF",
+        "line-width": 4,
+      },
     });
 
-    return () => map.remove();
-  }, [driverRoute, riderRoute]);
+    // Add rider route
+    map.addSource("rider-route", {
+      type: "geojson",
+      data: {
+        type: "Feature",
+        geometry: {
+          type: "LineString",
+          coordinates: riderRoute,
+        },
+      },
+    });
+
+    map.addLayer({
+      id: "rider-route-line",
+      type: "line",
+      source: "rider-route",
+      layout: { "line-join": "round", "line-cap": "round" },
+      paint: {
+        "line-color": "#FF4500",
+        "line-width": 4,
+      },
+    });
+
+    // Add markers
+    const markers = [
+      { coords: driverRoute[0], color: "#1E90FF", label: "Driver Start" },
+      { coords: driverRoute.at(-1), color: "#1E90FF", label: "Driver End" },
+      { coords: riderRoute[0], color: "#FF4500", label: "Rider Start" },
+      { coords: riderRoute.at(-1), color: "#FF4500", label: "Rider End" },
+    ];
+
+    markers.forEach(({ coords, color, label }) => {
+      const el = document.createElement("div");
+      el.style.backgroundColor = color;
+      el.style.width = "15px";
+      el.style.height = "15px";
+      el.style.borderRadius = "50%";
+      el.style.border = "2px solid white";
+      el.title = label;
+
+      new mapboxgl.Marker(el).setLngLat(coords).addTo(map);
+    });
+
+    // 🔍 Fit map to bounds of both routes
+    const allCoords = [...driverRoute, ...riderRoute];
+    const bounds = allCoords.reduce(
+      (b, coord) => b.extend(coord),
+      new mapboxgl.LngLatBounds(allCoords[0], allCoords[0])
+    );
+
+    map.fitBounds(bounds, {
+      padding: 50,
+      maxZoom: 16,
+      duration: 1000,
+    });
+  });
+
+  return () => map.remove();
+}, [driverRoute, riderRoute]);
 
   return (
- <div>
-    <h3 className="text-lg font-bold mb-2">Matched Route Map</h3>
-    <div className="h-[500px] w-full rounded-lg overflow-hidden">
-      <div ref={mapContainer} className="w-full h-full" />
-    </div>
+ <div className="flex flex-col h-full w-full">
+  <h3 className="text-lg font-bold mb-2 text-gray-800"></h3>
+
+  <div className="flex-1 rounded-lg overflow-hidden border shadow">
+    <div ref={mapContainer} className="w-full h-full" />
   </div>
+</div>
   );
 }
 

@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { reverseGeocode } from "../hooks/useGeocode";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../server/supabase";
-import { matchUsingRoutes } from "./useMatchWithRoutes";
+
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_GL_API;
 
 const LeftPanel = ({ UserId, setActiveInput, setFromLocation, setToLocation, fromLocation, toLocation, Usertype ,setSelectedMatchId}) => {
@@ -136,8 +136,21 @@ const { data, error } = await query;
   };
 
 
+const fetchMatchedRoutes = async (userType, userId) => {
+    try {
+      const response = await fetch(
+        `http://localhost:3001/api/match?userType=${userType}&userId=${userId}`
+      );
+      const data = await response.json();
+      console.log("✅ Matched pairs:", data);
+      return data;
+    } catch (err) {
+      console.error("❌ Error fetching matches:", err);
+      return [];
+    }
+  };
 
-
+const [matchedRides, setMatchedRides] = useState([]);
 
 const handleSubmit = async () => {
   if (!fromLocation || !toLocation || !travelDate || (!travelTime && !anyTime)) {
@@ -148,6 +161,7 @@ const handleSubmit = async () => {
   const formattedTime = anyTime ? "23:59" : travelTime;
   const fullDateTime = new Date(`${travelDate}T${formattedTime}:00`);
 
+  // Step 1: Insert current ride data into route_req
   const { error: insertError } = await supabase.from("route_req").insert([
     {
       user_id: UserId,
@@ -166,57 +180,126 @@ const handleSubmit = async () => {
     return;
   }
 
-  // Step 2: Match using advanced GPS+route logic
-  const newUser = {
-    user_id: UserId,
-    user_type: Usertype,
-    start_lat: fromLocation.lat,
-    start_lng: fromLocation.lng,
-    end_lat: toLocation.lat,
-    end_lng: toLocation.lng,
-  };
+  // Step 2: Call backend to get matched routes
+  const matches = await fetchMatchedRoutes(Usertype, UserId);
 
-  const result = await matchUsingRoutes(newUser);
+  if (matches.length > 0) {
+    alert(`Found ${matches.length} match(es)!`);
 
-  if (result?.match) {
-    const matchedUser = result.match;
+    // Step 3: Fetch current user's route
+    const { data: myRoute, error: myRouteError } = await supabase
+      .from("route_req")
+      .select("*")
+      .eq("user_id", UserId)
+      .order("time", { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-    const riderId = Usertype === "rider" ? UserId : matchedUser.user_id;
-    const driverId = Usertype === "driver" ? UserId : matchedUser.user_id;
-    const matchedTime = Usertype === "driver" ? fullDateTime.toISOString() : matchedUser.time;
-
-    const { error: matchError } = await supabase.from("matched_routes").insert([
-      {
-        driver_id: driverId,
-        user_id: riderId,
-        driver_start_lat: Usertype === "driver" ? fromLocation.lat : matchedUser.start_lat,
-        driver_start_lng: Usertype === "driver" ? fromLocation.lng : matchedUser.start_lng,
-        driver_end_lat: Usertype === "driver" ? toLocation.lat : matchedUser.end_lat,
-        driver_end_lng: Usertype === "driver" ? toLocation.lng : matchedUser.end_lng,
-        user_start_lat: Usertype === "rider" ? fromLocation.lat : matchedUser.start_lat,
-        user_start_lng: Usertype === "rider" ? fromLocation.lng : matchedUser.start_lng,
-        user_end_lat: Usertype === "rider" ? toLocation.lat : matchedUser.end_lat,
-        user_end_lng: Usertype === "rider" ? toLocation.lng : matchedUser.end_lng,
-        time: matchedTime,
-      },
-    ]);
-
-    if (matchError) {
-      console.error("❌ Match insertion error:", matchError.message);
+    if (myRouteError || !myRoute) {
+      console.error("❌ Failed to get current user route:", myRouteError?.message);
+      return;
     }
 
-    setMatchResult({
-      match: {
-        user_id: matchedUser.user_id,
-        type: Usertype === "rider" ? "driver" : "rider",
-        from: `${matchedUser.start_lat.toFixed(4)}, ${matchedUser.start_lng.toFixed(4)}`,
-        to: `${matchedUser.end_lat.toFixed(4)}, ${matchedUser.end_lng.toFixed(4)}`,
-      },
-    });
+    // Step 4: Insert matches into matched_routes
+    for (const match of matches) {
+      const matchedUserId = Usertype === "rider" ? match.driver_id : match.rider_id;
+
+      const { data: matchedRoute, error: matchedError } = await supabase
+        .from("route_req")
+        .select("*")
+        .eq("user_id", matchedUserId)
+        .order("time", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (matchedError || !matchedRoute) {
+        console.error("❌ Failed to get matched user route:", matchedError?.message);
+        continue;
+      }
+
+      const rider_id = Usertype === "rider" ? UserId : matchedUserId;
+      const driver_id = Usertype === "driver" ? UserId : matchedUserId;
+
+      const riderRoute = Usertype === "rider" ? myRoute : matchedRoute;
+      const driverRoute = Usertype === "driver" ? myRoute : matchedRoute;
+
+      const insertMatch = await supabase.from("matched_routes").insert([
+        {
+          rider_id,
+          driver_id,
+          driver_start_lat: driverRoute.start_lat,
+          driver_start_lng: driverRoute.start_lng,
+          rider_start_lat: riderRoute.start_lat,
+          rider_start_lng: riderRoute.start_lng,
+          driver_end_lat: driverRoute.end_lat,
+          driver_end_lng: driverRoute.end_lng,
+          rider_end_lat: riderRoute.end_lat,
+          rider_end_lng: riderRoute.end_lng,
+          time: driverRoute.time,
+        },
+      ]);
+
+      if (insertMatch.error) {
+        console.error("❌ Failed to insert into matched_routes:", insertMatch.error.message);
+      }
+    }
+
+    // ✅ Step 5: Add a short delay and fetch matched data again
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    await fetchUserMatches(); // manual trigger
   } else {
-    alert("No match found using route data.");
+    setMatchedRides([]);
+    alert("No matches found.");
   }
 };
+
+
+
+
+
+
+const fetchUserMatches = async () => {
+  if (!UserId || !Usertype) return;
+
+  const columnToMatch = Usertype === "rider" ? "rider_id" : "driver_id";
+  const { data, error } = await supabase
+    .from("matched_routes")
+    .select("*")
+    .eq(columnToMatch, UserId);
+
+  if (error) {
+    console.error("❌ Error fetching matched routes:", error.message);
+  } else {
+    setMatchedRides(data || []);
+  }
+};
+
+// 🚀 Automatically fetch matched routes on load
+useEffect(() => {
+  fetchUserMatches(); // initial fetch
+
+  const interval = setInterval(fetchUserMatches, 10000);
+  const handleVisibilityChange = () => {
+    if (document.visibilityState === "visible") fetchUserMatches();
+  };
+  const handleFocus = () => fetchUserMatches();
+
+  document.addEventListener("visibilitychange", handleVisibilityChange);
+  window.addEventListener("focus", handleFocus);
+
+  return () => {
+    clearInterval(interval);
+    document.removeEventListener("visibilitychange", handleVisibilityChange);
+    window.removeEventListener("focus", handleFocus);
+  };
+}, [UserId, Usertype]);
+
+
+
+
+
+
+
 
 
   const handleApprove = () => {
@@ -230,10 +313,6 @@ const handleMatchClick = (match) => {
   alert(match.id);
   setSelectedMatchId(match.id );
 };
-
-
-
-
 
   return (
     <div className="p-4 font-sans bg-white shadow-lg h-full overflow-y-auto">
@@ -347,87 +426,57 @@ const handleMatchClick = (match) => {
 
 
       {/* Match Display */}
-     {/* {matchResult?.matches?.length > 0 && (
-  <div className="mt-6 space-y-4">
-    <h3 className="text-lg font-bold">Matched Rides</h3>
-    {matchResult.matches.map((match, index) => (
-      <div
-        key={index}
-        onClick={() => handleMatchClick(match)}
-        className="cursor-pointer transform transition duration-200 hover:-translate-y-1 hover:shadow-lg bg-gray-100 rounded-lg p-4"
-      >
-        <p><strong>User ID:</strong> {match.user_id}</p>
-        <p><strong>Type:</strong> {match.type}</p>
-        <p><strong>From:</strong> {match.from}</p>
-        <p><strong>To:</strong> {match.to}</p>
+{matchedRides.length > 0 && (
+  <div className="mt-6">
+    <h3 className="text-xl font-bold mb-4 text-gray-800 border-b pb-2">
+      Your Matched Rides
+    </h3>
 
-        {Usertype === "rider" ? (
-          <p className="mt-2 text-yellow-600 font-medium">
-            ⏳ Waiting for driver to approve your ride...
-          </p>
-        ) : (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              handleApprove(); // You already have this
-            }}
-            className="mt-2 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-          >
-            Approve Ride
-          </button>
-        )}
-      </div>
-    ))}
+    <div className="grid gap-4">
+      {matchedRides.map((ride, index) => (
+        <button
+          key={index}
+          onClick={() => handleMatchClick(ride)}
+          className="text-left w-full border border-gray-300 p-4 rounded-xl shadow-md bg-white hover:bg-blue-50 hover:shadow-lg transition focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <div className="mb-2 text-sm text-gray-600">
+            <span className="font-semibold text-gray-800">Driver ID:</span>{" "}
+            {ride.driver_id ?? "N/A"}
+          </div>
+
+          <div className="mb-2 text-sm text-gray-600">
+            <span className="font-semibold text-gray-800">Rider ID:</span>{" "}
+            {ride.rider_id ?? "N/A"}
+          </div>
+
+          <div className="mb-2 text-sm text-gray-600">
+            <span className="font-semibold text-gray-800">Driver Start:</span>{" "}
+            {ride.driver_start_lat?.toFixed(4) ?? "?"},{" "}
+            {ride.driver_start_lng?.toFixed(4) ?? "?"}
+          </div>
+
+          <div className="mb-2 text-sm text-gray-600">
+            <span className="font-semibold text-gray-800">Rider Start:</span>{" "}
+            {ride.rider_start_lat?.toFixed(4) ?? "?"},{" "}
+            {ride.rider_start_lng?.toFixed(4) ?? "?"}
+          </div>
+
+          <div className="text-sm text-gray-600">
+            <span className="font-semibold text-gray-800">Time:</span>{" "}
+            {ride.time ? new Date(ride.time).toLocaleString() : "N/A"}
+          </div>
+        </button>
+      ))}
+    </div>
   </div>
-)} */}
+)}
 
-{approvedMatch ? (
-  <div className="mt-6 p-4 bg-white border rounded shadow">
-    <h3 className="text-xl font-bold mb-4">Matched User Details</h3>
 
-    <p><strong>User ID:</strong> {approvedMatch.user_id}</p>
-    <p><strong>Name:</strong> {approvedMatch.userDetails.name}</p>
-    <p><strong>Email:</strong> {approvedMatch.userDetails.email}</p>
-    <p><strong>From:</strong> {approvedMatch.from}</p>
-    <p><strong>To:</strong> {approvedMatch.to}</p>
 
-    <p className="mt-4 text-green-600 font-medium">
-      ✅ Ride approved. You can now contact the user or chat (if implemented).
-    </p>
-  </div>
-) : matchResult?.matches?.length > 0 ? (
-  <div className="mt-6 space-y-4">
-    <h3 className="text-lg font-bold">Matched Rides</h3>
-    {matchResult.matches.map((match, index) => (
-      <div
-        key={index}
-        onClick={() => handleMatchClick(match)}
-        className="cursor-pointer transform transition duration-200 hover:-translate-y-1 hover:shadow-lg bg-gray-100 rounded-lg p-4"
-      >
-        <p><strong>User ID:</strong> {match.user_id}</p>
-        <p><strong>Type:</strong> {match.type}</p>
-        <p><strong>From:</strong> {match.from}</p>
-        <p><strong>To:</strong> {match.to}</p>
 
-        {Usertype === "rider" ? (
-          <p className="mt-2 text-yellow-600 font-medium">
-            ⏳ Waiting for driver to approve your ride...
-          </p>
-        ) : (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              handleApprove(match); // ← PASS the match here!
-            }}
-            className="mt-2 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-          >
-            Approve Ride
-          </button>
-        )}
-      </div>
-    ))}
-  </div>
-) : null}
+
+
+
 
 
 
