@@ -15,6 +15,13 @@ import DriverDashboard from './components/Driver/DriverDashboard';
 import DriverActiveRide from './components/Driver/DriverActiveRide';
 import RiderActiveRide from './components/Driver/RiderActiveRide';
 
+
+
+
+// MatchRoutes imports
+import FindRide from './matchpath/findride';
+import PublishRide from './matchpath/publishride';
+
 function App() {
   const [logIn, setLogIn] = useState(false);
   const [fromCords, setFromCords] = useState('');
@@ -98,6 +105,20 @@ function App() {
         <Route path="/" element={<Getride logIn={logIn} fromCords={fromCords} toCords={toCords} setFromCords={setFromCords} setToCords={setToCords} from={from} to={to} setFrom={setFrom} setTo={setTo} />} />
         <Route path="/setride" element={<Setride />} />
         <Route path="/login" element={<Login setLogIn={setLogIn} />} />
+
+  <Route path="/findride" element={
+          <ProtectedRoute logIn={logIn}>
+            <FindRide logIn={logIn} UserId={localStorage.getItem("user_uuid")}/>
+          </ProtectedRoute>
+        } />
+
+ <Route path="/publishride" element={
+          <ProtectedRoute logIn={logIn}>
+            <PublishRide logIn={logIn} UserId={localStorage.getItem("user_uuid")} />
+          </ProtectedRoute>
+        } />
+
+
 
         <Route
           path="/dashboard"

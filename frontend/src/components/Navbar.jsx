@@ -106,11 +106,10 @@ export default function Navbar(props) {
                   <Link to="/"  onClick={() => setOpen(false)} > <span>🚗</span> <span>Book your ride</span> </Link> <Link/>
                 </li>
                 <li className="flex items-center space-x-3 hover:bg-gray-100 p-2 rounded">
-                  <Link to="/setride"  onClick={() => setOpen(false)} > <span>🚗</span> <span>Publish A Ride</span> </Link>
+                  <Link to="/findride"  onClick={() => setOpen(false)} > <span>🚗</span> <span>Find A Ride</span> </Link>
                 </li>
                 <li className="flex items-center space-x-3 hover:bg-gray-100 p-2 rounded">
-                  <span>💳</span>
-                  <span>Rate card</span>
+                  <Link to="/publishride"  onClick={() => setOpen(false)} > <span>🚗</span> <span>Publish A Ride</span> </Link>
                 </li>
                 <li className="flex items-center space-x-3 hover:bg-gray-100 p-2 rounded">
                   <span>🛟</span>
