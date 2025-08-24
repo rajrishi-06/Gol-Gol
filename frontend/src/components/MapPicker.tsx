@@ -1,30 +1,30 @@
 // MapPicker.tsx
 import React, { useRef, useEffect, useState } from 'react';
-import mapboxgl from 'mapbox-gl';
+import mapboxgl, {GeolocateControl} from 'mapbox-gl';
 import axios from 'axios';
 import { Crosshair } from 'lucide-react';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { GeolocateControl } from 'mapbox-gl';
-import { supabase } from "../server/supabase";
 
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_GL_API;
 
 interface MapPickerProps {
   setLoc: (value: string) => void;
   setClickedLoc: (flag: boolean) => void;
-  UserId: string;
+  setCords: (coords: { lat: number; lng: number }) => void;  // ⚡ new prop
+  initialCenter?: { lat: number; lng: number };
+  mode: "from" | "to";
 }
 
-const MapPicker: React.FC<MapPickerProps> = ({ setLoc, setClickedLoc,UserId }) => {
+const MapPicker: React.FC<MapPickerProps> = ({ setLoc, setClickedLoc, setCords, initialCenter, mode }) => {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
+  const geolocateRef = useRef<GeolocateControl | null>(null);
 
   const [coords, setCoords] = useState({ lat: 0, lng: 0 });
   const [searchInput, setSearchInput] = useState('');
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [didUserType, setDidUserType] = useState(false);
 
-const geolocateRef = useRef<GeolocateControl | null>(null);
   // Tooltip state
   const [tooltipVisible, setTooltipVisible] = useState(false);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
@@ -42,70 +42,180 @@ const geolocateRef = useRef<GeolocateControl | null>(null);
     };
   };
 
-  // Initialize map
-  useEffect(() => {
-    if (!mapRef.current && mapContainerRef.current) {
-      navigator.geolocation.getCurrentPosition(
-        ({ coords: { latitude: lat, longitude: lng } }) => {
-          setCoords({ lat, lng });
-          const { sw, ne } = computeBounds(lat, lng);
+   // Initialize map, preferring `initialCenter` over geolocation
+useEffect(() => {
+  let cancelled = false;
 
-          const map = new mapboxgl.Map({
-            container: mapContainerRef.current!,
-            style: 'mapbox://styles/mapbox/streets-v11',
-            center: [lng, lat],
-            zoom: 13,
-            maxBounds: [sw, ne],
-            scrollZoom: { around: 'center' },
-            touchZoomRotate: { around: 'center' },
-          });
-          mapRef.current = map;
+  async function init() {
+    let lat: number, lng: number;
 
-          // Grab/Grabbing cursor
-          map.getCanvas().style.cursor = 'grab';
-          map.on('mousedown', () => {
-            map.getCanvas().style.cursor = 'grabbing';
-          });
-          map.on('mouseup', () => {
-            map.getCanvas().style.cursor = 'grab';
-          });
-
-          // Update coords on move
-          map.on('move', () => {
-            const center = map.getCenter();
-            setCoords({ lat: center.lat, lng: center.lng });
-          });
-
-          // Reverse geocode after move ends
-          map.on('idle', async () => {
-            if (didUserType) return;
-            const { lat: cLat, lng: cLng } = map.getCenter();
-            try {
-              const res = await axios.get(
-                `https://api.mapbox.com/geocoding/v5/mapbox.places/${cLng},${cLat}.json`,
-                {
-                  params: {
-                    access_token: mapboxgl.accessToken,
-                    limit: 1,
-                  },
-                }
-              );
-              if (res.data.features.length > 0) {
-                setSearchInput(res.data.features[0].place_name);
-              }
-            } catch (err) {
-              console.error('Reverse-geocode error:', err);
-            }
-          });
-        },
-        (err) => {
-          console.error('Geolocation error:', err);
-          alert('Unable to get your location; map cannot initialize.');
-        }
-      );
+    // 1) Decide center:
+    if (initialCenter && initialCenter.lat && initialCenter.lng) {
+      lat = initialCenter.lat;
+      lng = initialCenter.lng;
+    } else {
+      // fallback to browser geolocation
+      try {
+        const pos = await new Promise<GeolocationPosition>((res, rej) =>
+          navigator.geolocation.getCurrentPosition(res, rej)
+        );
+        lat = pos.coords.latitude;
+        lng = pos.coords.longitude;
+      } catch (err) {
+        console.error('Geolocation/init error:', err);
+        alert('Unable to get location; map cannot initialize.');
+        return;
+      }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+
+    if (cancelled) return;
+    setCoords({ lat, lng });
+
+    // 2) Create map around that center
+    const { sw, ne } = computeBounds(lat, lng);
+    const map = new mapboxgl.Map({
+      container: mapContainerRef.current!,
+      style: 'mapbox://styles/mapbox/streets-v11',
+      center: [lng, lat],
+      zoom: 12,
+      maxBounds: [sw, ne],
+      scrollZoom: { around: 'center' }, // Add these back for better UX
+      touchZoomRotate: { around: 'center' }, // Add these back for better UX
+    });
+    mapRef.current = map;
+
+    // --- ADD THIS PART ---
+    // Add Geolocate control
+    const geolocateControl = new mapboxgl.GeolocateControl({
+      positionOptions: {
+        enableHighAccuracy: true,
+      },
+      trackUserLocation: true, // This will show a blue dot for the user's location
+      showUserHeading: true, // Shows direction if available
+    });
+    map.addControl(geolocateControl);
+    geolocateRef.current = geolocateControl; // Store reference if needed later
+
+    // Optional: If you want to automatically trigger geolocation on map load
+    // map.on('load', () => {
+    //   geolocateControl.trigger();
+    // });
+    // --- END ADD PART ---
+
+    // Grab/Grabbing cursor
+    map.getCanvas().style.cursor = 'grab';
+    map.on('mousedown', () => {
+      map.getCanvas().style.cursor = 'grabbing';
+    });
+    map.on('mouseup', () => {
+      map.getCanvas().style.cursor = 'grab';
+    });
+
+    // Update coords on move
+    map.on('move', () => {
+      const center = map.getCenter();
+      setCoords({ lat: center.lat, lng: center.lng });
+    });
+
+    // Reverse geocode after move ends
+    map.on('idle', async () => {
+      if (didUserType) return;
+      const { lat: cLat, lng: cLng } = map.getCenter();
+      try {
+        const res = await axios.get(
+          `https://api.mapbox.com/geocoding/v5/mapbox.places/${cLng},${cLat}.json`,
+          {
+            params: {
+              access_token: mapboxgl.accessToken,
+              limit: 1,
+            },
+          }
+        );
+        if (res.data.features.length > 0) {
+          setSearchInput(res.data.features[0].place_name);
+        }
+      } catch (err) {
+        console.error('Reverse-geocode error:', err);
+      }
+    });
+  }
+
+  init();
+  return () => {
+    cancelled = true;
+    mapRef.current?.remove();
+  };
+  // Add mapRef.current (or its dependencies like containerRef) and initialCenter
+  // if you want to re-run this effect when they change.
+  // For initial setup, an empty dependency array or just initialCenter is usually fine.
+}, [initialCenter]); // Added initialCenter as a dependency because it affects initialization logic
+
+// ... rest of your component ...
+
+  // // Initialize map
+  // useEffect(() => {
+  //   if (!mapRef.current && mapContainerRef.current) {
+  //     navigator.geolocation.getCurrentPosition(
+  //       ({ coords: { latitude: lat, longitude: lng } }) => {
+  //         setCoords({ lat, lng });
+  //         const { sw, ne } = computeBounds(lat, lng);
+
+  //         const map = new mapboxgl.Map({
+  //           container: mapContainerRef.current!,
+  //           style: 'mapbox://styles/mapbox/streets-v11',
+  //           center: [lng, lat],
+  //           zoom: 12,
+  //           maxBounds: [sw, ne],
+  //           scrollZoom: { around: 'center' },
+  //           touchZoomRotate: { around: 'center' },
+  //         });
+  //         mapRef.current = map;
+
+  //         // Grab/Grabbing cursor
+  //         map.getCanvas().style.cursor = 'grab';
+  //         map.on('mousedown', () => {
+  //           map.getCanvas().style.cursor = 'grabbing';
+  //         });
+  //         map.on('mouseup', () => {
+  //           map.getCanvas().style.cursor = 'grab';
+  //         });
+
+  //         // Update coords on move
+  //         map.on('move', () => {
+  //           const center = map.getCenter();
+  //           setCoords({ lat: center.lat, lng: center.lng });
+  //         });
+
+  //         // Reverse geocode after move ends
+  //         map.on('idle', async () => {
+  //           if (didUserType) return;
+  //           const { lat: cLat, lng: cLng } = map.getCenter();
+  //           try {
+  //             const res = await axios.get(
+  //               `https://api.mapbox.com/geocoding/v5/mapbox.places/${cLng},${cLat}.json`,
+  //               {
+  //                 params: {
+  //                   access_token: mapboxgl.accessToken,
+  //                   limit: 1,
+  //                 },
+  //               }
+  //             );
+  //             if (res.data.features.length > 0) {
+  //               setSearchInput(res.data.features[0].place_name);
+  //             }
+  //           } catch (err) {
+  //             console.error('Reverse-geocode error:', err);
+  //           }
+  //         });
+  //       },
+  //       (err) => {
+  //         console.error('Geolocation error:', err);
+  //         alert('Unable to get your location; map cannot initialize.');
+  //       }
+  //     );
+  //   }
+  //   // eslint-disable-next-line react-hooks/exhaustive-deps
+  // }, []);
 
   // Fetch suggestions when typing
   useEffect(() => {
@@ -214,8 +324,6 @@ const geolocateRef = useRef<GeolocateControl | null>(null);
     );
   };
 
- 
-
   // Tooltip: show after 3s of no move, hide immediately on any move or leave
   const onMapMouseMove = (e: React.MouseEvent) => {
     // update last position
@@ -242,73 +350,13 @@ const geolocateRef = useRef<GeolocateControl | null>(null);
     setTooltipVisible(false);
   };
 
-  // const handleOk = () => {
-      
-  //   setLoc(searchInput);
-  //   console.log('Location set:', coords);
-
-  //   setClickedLoc(false);
-  // };
-
-  
-
-const handleOk = async () => {
-  setLoc(searchInput);
- 
-  setClickedLoc(false);
-
-  
-
-  if (!UserId || !coords.lat || !coords.lng) {
-   console.error("Missing user ID or coordinates");
-    return;
-  }
-
-  // Check if the user already has a location record
-  const { data: existing, error: fetchError } = await supabase
-    .from("userlive_loc")
-    .select("id")
-    .eq("user_id", UserId)
-    .single();
-
-  if (fetchError && fetchError.code !== "PGRST116") {
-    console.error("Fetch error:", fetchError);
-    return;
-  }
-
-  if (existing) {
-    //  Update existing location
-    const { error: updateError } = await supabase
-      .from("userlive_loc")
-      .update({
-        latitude: coords.lat,
-        longitude: coords.lng,
-      })
-      .eq("user_id", UserId);
-
-    if (updateError) {
-      console.error("Update error:", updateError);
-    } else {
-      console.log("Live location updated!");
-    }
-  } else {
-    //  Insert new location
-    const { error: insertError } = await supabase.from("userlive_loc").insert([
-      {
-        user_id: UserId,
-        latitude: coords.lat,
-        longitude: coords.lng,
-      },
-    ]);
-
-    if (insertError) {
-      console.error("Insert error:", insertError);
-    } else {
-      console.log("Live location inserted!");
-    }
-  }
-};
-
+  const handleOk = () => {
+    // send the selected location back to parent
+    setLoc(searchInput);
+    setCords({ lat: coords.lat, lng: coords.lng });
+    // close the map
+    setClickedLoc(false);
+  };
 
   return (
     <div className="hidden sm:block flex-1 h-screen relative">
@@ -336,9 +384,12 @@ const handleOk = async () => {
 
       {/* Fixed Center Marker */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-full z-10 pointer-events-none">
-        <img src="/marker.svg" alt="marker" className="h-10 w-10" />
+        {mode === "from" ? (
+          <img src="/icons/pickup.svg" alt="from marker" className="h-10 w-10" />
+        ) : (
+          <img src="/icons/destination.svg" alt="to marker" className="h-10 w-10" />
+        )}
       </div>
-
       {/* Lat/Lng Display */}
       <div className="absolute bottom-4 left-4 bg-white p-2 rounded shadow-md z-20">
         <input

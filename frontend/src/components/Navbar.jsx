@@ -48,7 +48,7 @@ export default function Navbar(props) {
 
 
         {/* Login Button */}
-        {!props.UserId ? <div className="absolute right-4">
+        {!props.logIn ? <div className="absolute right-4">
           <button onClick={handelClickLogin}  className="text-sm text-gray-600 hover:text-black focus:outline-none">
             LOG IN
           </button>
@@ -100,16 +100,13 @@ export default function Navbar(props) {
             <div className="p-6 ">
               <ul className="space-y-6 text-gray-800">
                 <li className="flex items-center space-x-3 hover:bg-gray-100 p-2 rounded">
+                  <Link to="/driver/activate"  onClick={() => setOpen(false)} > <span>🚗</span> <span>Activate as Driver</span> </Link> <Link/>
+                </li>
+                <li className="flex items-center space-x-3 hover:bg-gray-100 p-2 rounded">
                   <Link to="/"  onClick={() => setOpen(false)} > <span>🚗</span> <span>Book your ride</span> </Link> <Link/>
                 </li>
                 <li className="flex items-center space-x-3 hover:bg-gray-100 p-2 rounded">
-                  <Link to="/setride"  onClick={() => setOpen(false)} > <span>🚗</span> <span>Activate as Driver</span> </Link>
-                </li>
-                 <li className="flex items-center space-x-3 hover:bg-gray-100 p-2 rounded">
-                  <Link to="/findride"  onClick={() => setOpen(false)} > <span>🚗</span> <span>Find a Ride</span> </Link>
-                </li>
-                 <li className="flex items-center space-x-3 hover:bg-gray-100 p-2 rounded">
-                  <Link to="/publishride"  onClick={() => setOpen(false)} > <span>🚗</span> <span>Publish a Ride</span> </Link>
+                  <Link to="/setride"  onClick={() => setOpen(false)} > <span>🚗</span> <span>Publish A Ride</span> </Link>
                 </li>
                 <li className="flex items-center space-x-3 hover:bg-gray-100 p-2 rounded">
                   <span>💳</span>

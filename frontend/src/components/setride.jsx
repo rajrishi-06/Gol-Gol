@@ -1,35 +1,14 @@
-import React from "react";
-import { Navigate } from "react-router-dom"; 
-import Navbar from "./Navbar";
+import react from "react"
 
-import DriverMap from "../comp/driver_map";
-import NearbyRequests from "../comp/NearbyRequests";
-function Setride(props) {
-  
-  if (!props.UserId) {
-    return <Navigate to="/login" replace />;
-  }
-
-  return (
-     <div className="flex flex-col sm:flex-row h-screen">
-    
-      <div className="w-full sm:w-[550px] h-screen p-6 bg-white overflow-auto border-r border-gray-200">
-       <Navbar logIn={props.logIn} UserId={props.UserId} />
-     
-
-        <NearbyRequests  UserId={props.UserId}/>
-      </div>
-
-    
-
-      <div className="hidden sm:block flex-1 h-screen relative">
-
-      <DriverMap/>
-      
-     </div>
- 
-    </div>
-  );
-}
+import LeftPanel from "./LeftPanel";
+import RightPanel from "./RightPanel";
+function Setride(props){
+    return (
+        <div className="flex flex-col sm:flex-row h-screen">
+            {/* <LeftPanel logIn={props.logIn} /> */}
+            <RightPanel />
+        </div>
+    )
+};
 
 export default Setride;

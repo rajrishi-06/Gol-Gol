@@ -1,8 +1,9 @@
 import React from "react";
-import { Navigate } from "react-router-dom"; 
+
 export default function LocationInputs({
   fromValue,
   toValue,
+  setMode,
   whenValue,
   whenOptions = ["Now"],
   onWhenChange = () => {},
@@ -10,13 +11,12 @@ export default function LocationInputs({
   setClickedTo,
 }) {
   return (
-
-  
-
     <div className="space-y-4 mb-6">
       <div
         className="flex items-center bg-gray-200 rounded-lg overflow-hidden cursor-pointer"
-        onClick={() => setClickedFrom(true)}
+        onClick={() => {
+          setClickedFrom(true)
+          setMode("from")}}
       >
         <span className="w-20 px-4 text-xs font-medium text-gray-500 uppercase">
           From
@@ -32,7 +32,10 @@ export default function LocationInputs({
 
       <div
         className="flex items-center bg-gray-200 rounded-lg overflow-hidden cursor-pointer"
-        onClick={() => setClickedTo(true)}
+        onClick={() => {
+          setClickedTo(true)
+          setMode("to")
+        }}
       >
         <span className="w-20 px-4 text-xs font-medium text-gray-500 uppercase">
           To
