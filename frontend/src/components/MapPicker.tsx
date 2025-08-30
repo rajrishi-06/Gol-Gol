@@ -10,7 +10,7 @@ mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_GL_API;
 interface MapPickerProps {
   setLoc: (value: string) => void;
   setClickedLoc: (flag: boolean) => void;
-  setCords: (coords: { lat: number; lng: number }) => void;  // ⚡ new prop
+  setCords: (coords: { lat: number; lng: number }) => void;
   initialCenter?: { lat: number; lng: number };
   mode: "from" | "to";
 }
@@ -28,7 +28,6 @@ const MapPicker: React.FC<MapPickerProps> = ({ setLoc, setClickedLoc, setCords, 
   // Tooltip state
   const [tooltipVisible, setTooltipVisible] = useState(false);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
-  // hold the timeout ID; in browsers setTimeout returns a number
   const idleTimer = useRef<number | null>(null);
 
   // Utility: compute 150km×150km bounds around a center
@@ -42,186 +41,114 @@ const MapPicker: React.FC<MapPickerProps> = ({ setLoc, setClickedLoc, setCords, 
     };
   };
 
-   // Initialize map, preferring `initialCenter` over geolocation
-useEffect(() => {
-  let cancelled = false;
+  // Initialize map, preferring `initialCenter` over geolocation
+  useEffect(() => {
+    let cancelled = false;
 
-  async function init() {
-    let lat: number, lng: number;
+    async function init() {
+      let lat: number, lng: number;
 
-    // 1) Decide center:
-    if (initialCenter && initialCenter.lat && initialCenter.lng) {
-      lat = initialCenter.lat;
-      lng = initialCenter.lng;
-    } else {
-      // fallback to browser geolocation
-      try {
-        const pos = await new Promise<GeolocationPosition>((res, rej) =>
-          navigator.geolocation.getCurrentPosition(res, rej)
-        );
-        lat = pos.coords.latitude;
-        lng = pos.coords.longitude;
-      } catch (err) {
-        console.error('Geolocation/init error:', err);
-        alert('Unable to get location; map cannot initialize.');
-        return;
+      // 1) Decide center: Check if initialCenter has valid coordinates
+      if (initialCenter && 
+          typeof initialCenter.lat === 'number' && 
+          typeof initialCenter.lng === 'number' &&
+          !isNaN(initialCenter.lat) && 
+          !isNaN(initialCenter.lng)) {
+        lat = initialCenter.lat;
+        lng = initialCenter.lng;
+        console.log('Using initialCenter:', { lat, lng });
+      } else {
+        // fallback to browser geolocation
+        try {
+          const pos = await new Promise<GeolocationPosition>((res, rej) =>
+            navigator.geolocation.getCurrentPosition(res, rej)
+          );
+          lat = pos.coords.latitude;
+          lng = pos.coords.longitude;
+          console.log('Using geolocation:', { lat, lng });
+        } catch (err) {
+          console.error('Geolocation/init error:', err);
+          alert('Unable to get location; map cannot initialize.');
+          return;
+        }
       }
+
+      if (cancelled) return;
+      setCoords({ lat, lng });
+
+      // 2) Create map around that center
+      const { sw, ne } = computeBounds(lat, lng);
+      const map = new mapboxgl.Map({
+        container: mapContainerRef.current!,
+        style: 'mapbox://styles/mapbox/streets-v11',
+        center: [lng, lat],
+        zoom: 12,
+        maxBounds: [sw, ne],
+        scrollZoom: { around: 'center' },
+        touchZoomRotate: { around: 'center' },
+      });
+      mapRef.current = map;
+
+      // Add Geolocate control
+      const geolocateControl = new mapboxgl.GeolocateControl({
+        positionOptions: {
+          enableHighAccuracy: true,
+        },
+        trackUserLocation: true,
+        showUserHeading: true,
+      });
+      map.addControl(geolocateControl);
+      geolocateRef.current = geolocateControl;
+
+      // Grab/Grabbing cursor
+      map.getCanvas().style.cursor = 'grab';
+      map.on('mousedown', () => {
+        map.getCanvas().style.cursor = 'grabbing';
+      });
+      map.on('mouseup', () => {
+        map.getCanvas().style.cursor = 'grab';
+      });
+
+      // Update coords on move
+      map.on('move', () => {
+        const center = map.getCenter();
+        setCoords({ lat: center.lat, lng: center.lng });
+      });
+
+      // Reverse geocode after move ends
+      map.on('idle', async () => {
+        if (didUserType) return;
+        const { lat: cLat, lng: cLng } = map.getCenter();
+        try {
+          const res = await axios.get(
+            `https://api.mapbox.com/geocoding/v5/mapbox.places/${cLng},${cLat}.json`,
+            {
+              params: {
+                access_token: mapboxgl.accessToken,
+                limit: 1,
+              },
+            }
+          );
+          if (res.data.features.length > 0) {
+            setSearchInput(res.data.features[0].place_name);
+          }
+        } catch (err) {
+          console.error('Reverse-geocode error:', err);
+        }
+      });
     }
 
-    if (cancelled) return;
-    setCoords({ lat, lng });
-
-    // 2) Create map around that center
-    const { sw, ne } = computeBounds(lat, lng);
-    const map = new mapboxgl.Map({
-      container: mapContainerRef.current!,
-      style: 'mapbox://styles/mapbox/streets-v11',
-      center: [lng, lat],
-      zoom: 12,
-      maxBounds: [sw, ne],
-      scrollZoom: { around: 'center' }, // Add these back for better UX
-      touchZoomRotate: { around: 'center' }, // Add these back for better UX
-    });
-    mapRef.current = map;
-
-    // --- ADD THIS PART ---
-    // Add Geolocate control
-    const geolocateControl = new mapboxgl.GeolocateControl({
-      positionOptions: {
-        enableHighAccuracy: true,
-      },
-      trackUserLocation: true, // This will show a blue dot for the user's location
-      showUserHeading: true, // Shows direction if available
-    });
-    map.addControl(geolocateControl);
-    geolocateRef.current = geolocateControl; // Store reference if needed later
-
-    // Optional: If you want to automatically trigger geolocation on map load
-    // map.on('load', () => {
-    //   geolocateControl.trigger();
-    // });
-    // --- END ADD PART ---
-
-    // Grab/Grabbing cursor
-    map.getCanvas().style.cursor = 'grab';
-    map.on('mousedown', () => {
-      map.getCanvas().style.cursor = 'grabbing';
-    });
-    map.on('mouseup', () => {
-      map.getCanvas().style.cursor = 'grab';
-    });
-
-    // Update coords on move
-    map.on('move', () => {
-      const center = map.getCenter();
-      setCoords({ lat: center.lat, lng: center.lng });
-    });
-
-    // Reverse geocode after move ends
-    map.on('idle', async () => {
-      if (didUserType) return;
-      const { lat: cLat, lng: cLng } = map.getCenter();
-      try {
-        const res = await axios.get(
-          `https://api.mapbox.com/geocoding/v5/mapbox.places/${cLng},${cLat}.json`,
-          {
-            params: {
-              access_token: mapboxgl.accessToken,
-              limit: 1,
-            },
-          }
-        );
-        if (res.data.features.length > 0) {
-          setSearchInput(res.data.features[0].place_name);
-        }
-      } catch (err) {
-        console.error('Reverse-geocode error:', err);
-      }
-    });
-  }
-
-  init();
-  return () => {
-    cancelled = true;
-    mapRef.current?.remove();
-  };
-  // Add mapRef.current (or its dependencies like containerRef) and initialCenter
-  // if you want to re-run this effect when they change.
-  // For initial setup, an empty dependency array or just initialCenter is usually fine.
-}, [initialCenter]); // Added initialCenter as a dependency because it affects initialization logic
-
-// ... rest of your component ...
-
-  // // Initialize map
-  // useEffect(() => {
-  //   if (!mapRef.current && mapContainerRef.current) {
-  //     navigator.geolocation.getCurrentPosition(
-  //       ({ coords: { latitude: lat, longitude: lng } }) => {
-  //         setCoords({ lat, lng });
-  //         const { sw, ne } = computeBounds(lat, lng);
-
-  //         const map = new mapboxgl.Map({
-  //           container: mapContainerRef.current!,
-  //           style: 'mapbox://styles/mapbox/streets-v11',
-  //           center: [lng, lat],
-  //           zoom: 12,
-  //           maxBounds: [sw, ne],
-  //           scrollZoom: { around: 'center' },
-  //           touchZoomRotate: { around: 'center' },
-  //         });
-  //         mapRef.current = map;
-
-  //         // Grab/Grabbing cursor
-  //         map.getCanvas().style.cursor = 'grab';
-  //         map.on('mousedown', () => {
-  //           map.getCanvas().style.cursor = 'grabbing';
-  //         });
-  //         map.on('mouseup', () => {
-  //           map.getCanvas().style.cursor = 'grab';
-  //         });
-
-  //         // Update coords on move
-  //         map.on('move', () => {
-  //           const center = map.getCenter();
-  //           setCoords({ lat: center.lat, lng: center.lng });
-  //         });
-
-  //         // Reverse geocode after move ends
-  //         map.on('idle', async () => {
-  //           if (didUserType) return;
-  //           const { lat: cLat, lng: cLng } = map.getCenter();
-  //           try {
-  //             const res = await axios.get(
-  //               `https://api.mapbox.com/geocoding/v5/mapbox.places/${cLng},${cLat}.json`,
-  //               {
-  //                 params: {
-  //                   access_token: mapboxgl.accessToken,
-  //                   limit: 1,
-  //                 },
-  //               }
-  //             );
-  //             if (res.data.features.length > 0) {
-  //               setSearchInput(res.data.features[0].place_name);
-  //             }
-  //           } catch (err) {
-  //             console.error('Reverse-geocode error:', err);
-  //           }
-  //         });
-  //       },
-  //       (err) => {
-  //         console.error('Geolocation error:', err);
-  //         alert('Unable to get your location; map cannot initialize.');
-  //       }
-  //     );
-  //   }
-  //   // eslint-disable-next-line react-hooks/exhaustive-deps
-  // }, []);
+    init();
+    return () => {
+      cancelled = true;
+      mapRef.current?.remove();
+    };
+  }, [initialCenter]);
 
   // Fetch suggestions when typing
   useEffect(() => {
     if (!didUserType || !mapRef.current) return;
     const trimmed = searchInput.trim();
-    // If input is coords or empty, clear suggestions
     if (!trimmed || /^[-+]?\d+(?:\.\d+)?,\s*[-+]?\d+(?:\.\d+)?$/.test(trimmed)) {
       setSuggestions([]);
       return;
@@ -255,7 +182,7 @@ useEffect(() => {
     const { sw, ne } = computeBounds(lat, lng);
     setSearchInput(place.place_name);
     mapRef.current!.setMaxBounds([sw, ne]);
-  mapRef.current!.flyTo({ center: [lng, lat], zoom: 14 });
+    mapRef.current!.flyTo({ center: [lng, lat], zoom: 14 });
     setCoords({ lat, lng });
     setSuggestions([]);
     setDidUserType(false);
@@ -273,13 +200,12 @@ useEffect(() => {
       const lng = parseFloat(coordMatch[2]);
       const { sw, ne } = computeBounds(lat, lng);
       mapRef.current!.setMaxBounds([sw, ne]);
-  mapRef.current!.flyTo({ center: [lng, lat], zoom: 14 });
+      mapRef.current!.flyTo({ center: [lng, lat], zoom: 14 });
       setCoords({ lat, lng });
       setSuggestions([]);
     } else if (suggestions.length > 0) {
       handleSuggestionClick(suggestions[0]);
     } else {
-      // fallback geocode
       const { sw, ne } = computeBounds(coords.lat, coords.lng);
       try {
         const res = await axios.get(
@@ -326,15 +252,12 @@ useEffect(() => {
 
   // Tooltip: show after 3s of no move, hide immediately on any move or leave
   const onMapMouseMove = (e: React.MouseEvent) => {
-    // update last position
     setTooltipPos({ x: e.clientX + 12, y: e.clientY + 12 });
 
-    // hide it right away
     if (tooltipVisible) {
       setTooltipVisible(false);
     }
 
-    // reset idle timer
     if (idleTimer.current !== null) {
       clearTimeout(idleTimer.current);
     }
@@ -351,16 +274,13 @@ useEffect(() => {
   };
 
   const handleOk = () => {
-    // send the selected location back to parent
     setLoc(searchInput);
     setCords({ lat: coords.lat, lng: coords.lng });
-    // close the map
     setClickedLoc(false);
   };
 
   return (
     <div className="hidden sm:block flex-1 h-screen relative">
-      {/* Map Canvas */}
       <div
         ref={mapContainerRef}
         className="absolute top-0 left-0 w-full h-full"
@@ -368,7 +288,6 @@ useEffect(() => {
         onMouseLeave={onMapMouseLeave}
       />
 
-      {/* Tooltip */}
       {tooltipVisible && (
         <div
           className="absolute bg-black text-white text-xs px-2 py-1 rounded pointer-events-none z-50"
@@ -382,7 +301,6 @@ useEffect(() => {
         </div>
       )}
 
-      {/* Fixed Center Marker */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-full z-10 pointer-events-none">
         {mode === "from" ? (
           <img src="/icons/pickup.svg" alt="from marker" className="h-10 w-10" />
@@ -390,7 +308,7 @@ useEffect(() => {
           <img src="/icons/destination.svg" alt="to marker" className="h-10 w-10" />
         )}
       </div>
-      {/* Lat/Lng Display */}
+
       <div className="absolute bottom-4 left-4 bg-white p-2 rounded shadow-md z-20">
         <input
           type="text"
@@ -400,7 +318,6 @@ useEffect(() => {
         />
       </div>
 
-      {/* Search Bar */}
       <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 w-[90%] max-w-lg">
         <div className="flex flex-col bg-white shadow rounded overflow-visible relative">
           <div className="flex items-center">

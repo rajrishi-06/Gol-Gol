@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, useNavigate } from 'react-router-dom';
-import Getride from './components/getride';
+import Getride from './components/GetRide';
 import Login from './components/Login';
-import Setride from './components/Setride';
 import Dashboard from './components/Dashboard';
 import ProtectedRoute from './components/ProtectedRoute';
 import Book from './components/Book';
@@ -15,12 +14,6 @@ import DriverDashboard from './components/Driver/DriverDashboard';
 import DriverActiveRide from './components/Driver/DriverActiveRide';
 import RiderActiveRide from './components/Driver/RiderActiveRide';
 
-
-
-
-// MatchRoutes imports
-import FindRide from './matchpath/findride';
-import PublishRide from './matchpath/publishride';
 
 function App() {
   const [logIn, setLogIn] = useState(false);
@@ -102,23 +95,23 @@ function App() {
   return (
     <div>
       <Routes>
-        <Route path="/" element={<Getride logIn={logIn} fromCords={fromCords} toCords={toCords} setFromCords={setFromCords} setToCords={setToCords} from={from} to={to} setFrom={setFrom} setTo={setTo} />} />
-        <Route path="/setride" element={<Setride />} />
+        <Route 
+          path="/" 
+          element={ 
+          <Getride 
+            logIn={logIn} 
+            fromCords={fromCords} 
+            toCords={toCords} 
+            setFromCords={setFromCords} 
+            setToCords={setToCords} 
+            from={from} 
+            to={to} 
+            setFrom={setFrom} 
+            setTo={setTo} 
+          />} 
+        />
+        
         <Route path="/login" element={<Login setLogIn={setLogIn} />} />
-
-  <Route path="/findride" element={
-          <ProtectedRoute logIn={logIn}>
-            <FindRide logIn={logIn} UserId={localStorage.getItem("user_uuid")}/>
-          </ProtectedRoute>
-        } />
-
- <Route path="/publishride" element={
-          <ProtectedRoute logIn={logIn}>
-            <PublishRide logIn={logIn} UserId={localStorage.getItem("user_uuid")} />
-          </ProtectedRoute>
-        } />
-
-
 
         <Route
           path="/dashboard"

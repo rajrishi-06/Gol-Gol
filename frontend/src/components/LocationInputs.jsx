@@ -1,22 +1,47 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 
 export default function LocationInputs({
   fromValue,
   toValue,
   setMode,
   whenValue,
-  whenOptions = ["Now"],
+  whenOptions = ["Now", "In 30 minutes", "Schedule..."],
+  setDateOfDeparture,
   onWhenChange = () => {},
   setClickedFrom,
   setClickedTo,
+  activeTab, // passed from parent
 }) {
+  const [customTime, setCustomTime] = useState("");
+  const [dateValue, setDateValue] = useState("");
+
+  useEffect(() => {
+    const now = new Date();
+    if (whenValue === "Now") {
+      setDateOfDeparture(now.toISOString());
+    } else if (whenValue === "In 30 minutes") {
+      setDateOfDeparture(new Date(now.getTime() + 30 * 60 * 1000).toISOString());
+    } else if (dateValue && customTime && whenValue === "Schedule...") {
+      const isoString = new Date(`${dateValue}T${customTime}:00`).toISOString();
+      setDateOfDeparture(isoString);
+    } else {
+      setDateOfDeparture(null); // Reset if not fully selected
+    }
+  }, [dateValue, customTime, whenValue, setDateOfDeparture]);
+
+
+  // today's date (restrict past selection)
+  const todayStr = new Date().toISOString().split("T")[0];
+
   return (
     <div className="space-y-4 mb-6">
+      {/* From */}
       <div
         className="flex items-center bg-gray-200 rounded-lg overflow-hidden cursor-pointer"
         onClick={() => {
-          setClickedFrom(true)
-          setMode("from")}}
+          setClickedFrom(true);
+          setMode("from");
+        }}
       >
         <span className="w-20 px-4 text-xs font-medium text-gray-500 uppercase">
           From
@@ -30,11 +55,12 @@ export default function LocationInputs({
         />
       </div>
 
+      {/* To */}
       <div
         className="flex items-center bg-gray-200 rounded-lg overflow-hidden cursor-pointer"
         onClick={() => {
-          setClickedTo(true)
-          setMode("to")
+          setClickedTo(true);
+          setMode("to");
         }}
       >
         <span className="w-20 px-4 text-xs font-medium text-gray-500 uppercase">
@@ -49,6 +75,7 @@ export default function LocationInputs({
         />
       </div>
 
+      {/* When */}
       <div className="relative flex items-center bg-gray-200 rounded-lg overflow-hidden">
         <span className="w-20 px-4 text-xs font-medium text-gray-500 uppercase">
           When
@@ -76,6 +103,39 @@ export default function LocationInputs({
           />
         </svg>
       </div>
+
+      {/* Custom time input */}
+      {whenValue === "Schedule..." && (
+        <div className="flex items-center bg-gray-200 rounded-lg overflow-hidden">
+          <span className="w-20 px-4 text-xs font-medium text-gray-500 uppercase">
+            Time
+          </span>
+          <input
+            type="time"
+            value={customTime}
+            onChange={(e) => setCustomTime(e.target.value)}
+            className="flex-1 bg-transparent p-3 text-sm focus:outline-none"
+            placeholder="Set time (HH:MM)"
+          />
+        </div>
+      )}
+
+      {/* Date of Travel */}
+      {(activeTab === "PUBLISH RIDE" || activeTab === "FIND MATCH") &&
+        whenValue === "Schedule..." && (
+          <div className="flex items-center bg-gray-200 rounded-lg overflow-hidden">
+            <span className="w-20 px-4 text-xs font-medium text-gray-500 uppercase">
+              Date
+            </span>
+            <input
+              type="date"
+              min={todayStr}
+              value={dateValue}
+              onChange={(e) => setDateValue(e.target.value)}
+              className="flex-1 bg-transparent p-3 text-sm focus:outline-none"
+            />
+          </div>
+        )}
     </div>
   );
 }
