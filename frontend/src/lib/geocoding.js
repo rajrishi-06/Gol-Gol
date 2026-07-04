@@ -18,9 +18,26 @@ export async function reverseGeocode(lng, lat, { types } = {}) {
   return data.features?.[0]?.place_name ?? null;
 }
 
-/** Forward-geocode a query, optionally biased to a bounding box. */
-export async function forwardGeocode(query, { bbox, limit = 5 } = {}) {
-  const params = new URLSearchParams({ access_token: MAPBOX_TOKEN, limit: String(limit) });
+/**
+ * Forward-geocode a query with strong locality bias. `proximity` (the current
+ * map centre) is the key relevance lever — without it Mapbox returns globally
+ * ranked, often-wrong matches. Also enables autocomplete and biases to India.
+ */
+export async function forwardGeocode(
+  query,
+  { proximity, bbox, limit = 7, country = "in", language = "en" } = {}
+) {
+  const params = new URLSearchParams({
+    access_token: MAPBOX_TOKEN,
+    limit: String(limit),
+    autocomplete: "true",
+    fuzzyMatch: "true",
+    language,
+    // Prefer specific, human places over broad regions.
+    types: "poi,address,place,locality,neighborhood,postcode",
+  });
+  if (country) params.set("country", country);
+  if (proximity) params.set("proximity", `${proximity.lng},${proximity.lat}`);
   if (bbox) params.set("bbox", bbox.join(","));
   const res = await fetch(`${geocodeBase}/${encodeURIComponent(query)}.json?${params}`);
   if (!res.ok) throw new Error("Geocoding failed");

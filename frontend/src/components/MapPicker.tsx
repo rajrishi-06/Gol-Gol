@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useState } from "react";
 import mapboxgl from "mapbox-gl";
-import { Crosshair, ArrowLeft, Check, Search } from "lucide-react";
+import { Crosshair, ArrowLeft, Check, Search, MapPin } from "lucide-react";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { MAP_STYLE } from "../lib/mapbox";
 import { computeBounds } from "../lib/geo";
@@ -64,6 +64,12 @@ const MapPicker: React.FC<MapPickerProps> = ({ setLoc, setClickedLoc, setCords, 
         zoom: 13,
         maxBounds: [sw, ne] as any,
         attributionControl: false,
+        // Zoom around the centre pin (not the cursor) so the selected point
+        // stays fixed while the user zooms.
+        scrollZoom: { around: "center" },
+        touchZoomRotate: { around: "center" },
+        doubleClickZoom: false,
+        dragRotate: false,
       });
       mapRef.current = map;
       // The centre coordinate is valid immediately, so enable Confirm now
@@ -107,9 +113,9 @@ const MapPicker: React.FC<MapPickerProps> = ({ setLoc, setClickedLoc, setCords, 
       return;
     }
     const t = setTimeout(async () => {
-      const { sw, ne } = computeBounds(coords.lat, coords.lng);
       try {
-        setSuggestions(await forwardGeocode(trimmed, { bbox: [sw[0], sw[1], ne[0], ne[1]] }));
+        // Bias results to what the user is currently looking at.
+        setSuggestions(await forwardGeocode(trimmed, { proximity: coords }));
       } catch {
         setSuggestions([]);
       }
@@ -142,9 +148,8 @@ const MapPicker: React.FC<MapPickerProps> = ({ setLoc, setClickedLoc, setCords, 
     } else if (suggestions.length > 0) {
       handleSuggestionClick(suggestions[0]);
     } else {
-      const { sw, ne } = computeBounds(coords.lat, coords.lng);
       try {
-        const results = await forwardGeocode(trimmed, { bbox: [sw[0], sw[1], ne[0], ne[1]], limit: 1 });
+        const results = await forwardGeocode(trimmed, { proximity: coords, limit: 1 });
         if (results[0]) handleSuggestionClick(results[0]);
       } catch {
         /* ignore */
@@ -212,17 +217,26 @@ const MapPicker: React.FC<MapPickerProps> = ({ setLoc, setClickedLoc, setCords, 
 
         {suggestions.length > 0 && (
           <ul className="mx-auto mt-2 max-w-xl overflow-hidden rounded-2xl border border-border bg-surface shadow-floating">
-            {suggestions.map((s, i) => (
-              <li key={i}>
-                <button
-                  onClick={() => handleSuggestionClick(s)}
-                  className="flex w-full items-start gap-2 px-4 py-2.5 text-left text-sm text-foreground transition-colors hover:bg-surface-2 focus-visible:bg-surface-2 focus-visible:outline-none"
-                >
-                  <Search className="mt-0.5 h-3.5 w-3.5 shrink-0 text-subtle" />
-                  <span className="line-clamp-2">{s.place_name}</span>
-                </button>
-              </li>
-            ))}
+            {suggestions.map((s, i) => {
+              // Split the main place name from its administrative context.
+              const context = s.place_name?.startsWith(s.text)
+                ? s.place_name.slice(s.text.length).replace(/^,\s*/, "")
+                : s.place_name;
+              return (
+                <li key={s.id || i}>
+                  <button
+                    onClick={() => handleSuggestionClick(s)}
+                    className="flex w-full items-start gap-2.5 px-4 py-2.5 text-left transition-colors hover:bg-surface-2 focus-visible:bg-surface-2 focus-visible:outline-none"
+                  >
+                    <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-medium text-foreground">{s.text}</span>
+                      {context && <span className="block truncate text-xs text-muted">{context}</span>}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>

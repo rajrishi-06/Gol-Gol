@@ -36,14 +36,11 @@ function RouteCard() {
     <div className="glass w-full max-w-sm rounded-3xl border border-white/15 p-5 shadow-floating">
       <div className="flex items-center justify-between">
         <span className="inline-flex items-center gap-2 text-xs font-medium text-white/70">
-          <span className="relative flex h-2 w-2">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand-300 opacity-75" />
-            <span className="relative inline-flex h-2 w-2 rounded-full bg-brand-300" />
-          </span>
-          Live trip
+          <span className="h-2 w-2 rounded-full bg-brand-300" />
+          Route preview
         </span>
         <span className="rounded-full bg-white/10 px-2.5 py-0.5 text-xs font-medium text-white/80">
-          ETA 12 min
+          Upfront fare
         </span>
       </div>
 
@@ -82,8 +79,8 @@ function RouteCard() {
       <div className="mt-3 flex items-center gap-3 rounded-2xl bg-white/10 p-3">
         <div className="grid h-10 w-10 place-items-center rounded-xl bg-white/15 text-lg">🚗</div>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium text-white">Prime Sedan · MH 12 AB 3456</p>
-          <p className="text-xs text-white/60">Rahul · 4.9 ★ · arriving now</p>
+          <p className="truncate text-sm font-medium text-white">Prime Sedan · comfy &amp; AC</p>
+          <p className="text-xs text-white/60">Verified drivers · 4.9 ★ rated</p>
         </div>
       </div>
     </div>
