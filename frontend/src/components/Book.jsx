@@ -1,14 +1,16 @@
-import React from 'react';
-import Leftside from './BookLeft';
-import Rightside from './BookRight';
+import { useLocation } from "react-router-dom";
+import BookLeft from "./BookLeft";
+import BookRight from "./BookRight";
 
-export default function Book(props) {
-  
+export default function Book() {
+  const { state } = useLocation();
+  const fromCords = state?.fromCords;
+  const toCords = state?.toCords;
 
   return (
-    <div className="flex flex-col sm:flex-row h-screen">
-      <Leftside fromCords={props.fromCords} toCords={props.toCords} />
-      <Rightside fromCords={props.fromCords} toCords={props.toCords} />
+    <div className="flex h-[100dvh] flex-col overflow-hidden sm:flex-row">
+      <BookLeft />
+      <BookRight fromCords={fromCords} toCords={toCords} />
     </div>
   );
 }

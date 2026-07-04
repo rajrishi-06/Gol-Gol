@@ -1,5 +1,12 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import { ChevronDown, MapPin, Clock } from "lucide-react";
+import { Select } from "./ui/Field";
+import { cn } from "../lib/cn";
 
+/**
+ * From / To / When trip inputs. The location rows are real buttons (keyboard
+ * operable, unlike the previous clickable divs) connected by a route rail.
+ */
 export default function LocationInputs({
   fromValue,
   toValue,
@@ -10,7 +17,7 @@ export default function LocationInputs({
   onWhenChange = () => {},
   setClickedFrom,
   setClickedTo,
-  activeTab, // passed from parent
+  activeTab,
 }) {
   const [customTime, setCustomTime] = useState("");
   const [dateValue, setDateValue] = useState("");
@@ -22,120 +29,127 @@ export default function LocationInputs({
     } else if (whenValue === "In 30 minutes") {
       setDateOfDeparture(new Date(now.getTime() + 30 * 60 * 1000).toISOString());
     } else if (dateValue && customTime && whenValue === "Schedule...") {
-      const isoString = new Date(`${dateValue}T${customTime}:00`).toISOString();
-      setDateOfDeparture(isoString);
+      setDateOfDeparture(new Date(`${dateValue}T${customTime}:00`).toISOString());
     } else {
-      setDateOfDeparture(null); // Reset if not fully selected
+      setDateOfDeparture(null);
     }
   }, [dateValue, customTime, whenValue, setDateOfDeparture]);
 
-
-  // today's date (restrict past selection)
   const todayStr = new Date().toISOString().split("T")[0];
+  const scheduling = whenValue === "Schedule...";
+
+  const LocationRow = ({ label, value, placeholder, onClick, tone }) => (
+    <button
+      type="button"
+      onClick={onClick}
+      className="group flex w-full items-center gap-3 px-3.5 py-3 text-left transition-colors hover:bg-surface-2 focus-visible:bg-surface-2 focus-visible:outline-none"
+    >
+      <span
+        className={cn(
+          "grid h-8 w-8 shrink-0 place-items-center rounded-lg",
+          tone === "from" ? "bg-primary-subtle text-primary-subtle-fg" : "bg-danger-subtle text-danger-fg"
+        )}
+      >
+        {tone === "from" ? (
+          <span className="h-2.5 w-2.5 rounded-full bg-current" />
+        ) : (
+          <MapPin className="h-4 w-4" />
+        )}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-[0.7rem] font-semibold uppercase tracking-wider text-subtle">
+          {label}
+        </span>
+        <span className={cn("block truncate text-sm", value ? "text-foreground" : "text-subtle")}>
+          {value || placeholder}
+        </span>
+      </span>
+      <ChevronDown className="h-4 w-4 -rotate-90 text-subtle transition-transform group-hover:translate-x-0.5" />
+    </button>
+  );
 
   return (
-    <div className="space-y-4 mb-6">
-      {/* From */}
-      <div
-        className="flex items-center bg-gray-200 rounded-lg overflow-hidden cursor-pointer"
-        onClick={() => {
-          setClickedFrom(true);
-          setMode("from");
-        }}
-      >
-        <span className="w-20 px-4 text-xs font-medium text-gray-500 uppercase">
-          From
-        </span>
-        <input
-          type="text"
+    <div className="space-y-3">
+      {/* Connected From → To card with a route rail. */}
+      <div className="relative overflow-hidden rounded-2xl border border-border bg-surface shadow-soft">
+        <span
+          aria-hidden="true"
+          className="absolute left-[27px] top-[38px] h-[26px] w-px border-l border-dashed border-border-strong"
+        />
+        <LocationRow
+          label="Pickup"
           value={fromValue}
           placeholder="Enter your location"
-          readOnly
-          className="flex-1 bg-transparent p-3 text-sm placeholder-gray-500 focus:outline-none"
+          tone="from"
+          onClick={() => {
+            setClickedFrom(true);
+            setMode("from");
+          }}
         />
-      </div>
-
-      {/* To */}
-      <div
-        className="flex items-center bg-gray-200 rounded-lg overflow-hidden cursor-pointer"
-        onClick={() => {
-          setClickedTo(true);
-          setMode("to");
-        }}
-      >
-        <span className="w-20 px-4 text-xs font-medium text-gray-500 uppercase">
-          To
-        </span>
-        <input
-          type="text"
+        <div className="mx-3.5 border-t border-border" />
+        <LocationRow
+          label="Drop"
           value={toValue}
           placeholder="Search for a locality or landmark"
-          readOnly
-          className="flex-1 bg-transparent p-3 text-sm placeholder-gray-500 focus:outline-none"
+          tone="to"
+          onClick={() => {
+            setClickedTo(true);
+            setMode("to");
+          }}
         />
       </div>
 
       {/* When */}
-      <div className="relative flex items-center bg-gray-200 rounded-lg overflow-hidden">
-        <span className="w-20 px-4 text-xs font-medium text-gray-500 uppercase">
+      <div className="relative flex items-center rounded-xl border border-border bg-surface shadow-soft">
+        <span className="grid h-8 w-8 shrink-0 place-items-center pl-2.5 text-subtle">
+          <Clock className="h-4 w-4" />
+        </span>
+        <span className="pl-1 pr-1 text-[0.7rem] font-semibold uppercase tracking-wider text-subtle">
           When
         </span>
-        <select
+        <Select
           value={whenValue}
           onChange={(e) => onWhenChange(e.target.value)}
-          className="flex-1 appearance-none bg-transparent p-3 text-sm focus:outline-none"
+          aria-label="When do you want to travel"
+          className="border-0 bg-transparent pl-2 shadow-none focus:ring-0"
         >
           {whenOptions.map((opt) => (
             <option key={opt}>{opt}</option>
           ))}
-        </select>
-        <svg
-          className="w-4 h-4 absolute right-3 text-gray-500 pointer-events-none"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M19 9l-7 7-7-7"
-          />
-        </svg>
+        </Select>
+        <ChevronDown className="pointer-events-none absolute right-3.5 h-4 w-4 text-subtle" />
       </div>
 
-      {/* Custom time input */}
-      {whenValue === "Schedule..." && (
-        <div className="flex items-center bg-gray-200 rounded-lg overflow-hidden">
-          <span className="w-20 px-4 text-xs font-medium text-gray-500 uppercase">
-            Time
-          </span>
-          <input
-            type="time"
-            value={customTime}
-            onChange={(e) => setCustomTime(e.target.value)}
-            className="flex-1 bg-transparent p-3 text-sm focus:outline-none"
-            placeholder="Set time (HH:MM)"
-          />
-        </div>
-      )}
-
-      {/* Date of Travel */}
-      {(activeTab === "PUBLISH RIDE" || activeTab === "FIND MATCH") &&
-        whenValue === "Schedule..." && (
-          <div className="flex items-center bg-gray-200 rounded-lg overflow-hidden">
-            <span className="w-20 px-4 text-xs font-medium text-gray-500 uppercase">
-              Date
+      {/* Scheduling controls */}
+      {scheduling && (
+        <div className="grid grid-cols-2 gap-3">
+          <label className="flex flex-col gap-1">
+            <span className="text-[0.7rem] font-semibold uppercase tracking-wider text-subtle">
+              Time
             </span>
             <input
-              type="date"
-              min={todayStr}
-              value={dateValue}
-              onChange={(e) => setDateValue(e.target.value)}
-              className="flex-1 bg-transparent p-3 text-sm focus:outline-none"
+              type="time"
+              value={customTime}
+              onChange={(e) => setCustomTime(e.target.value)}
+              className="h-11 rounded-xl border border-border-strong bg-surface px-3 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/15"
             />
-          </div>
-        )}
+          </label>
+          {(activeTab === "PUBLISH RIDE" || activeTab === "FIND MATCH") && (
+            <label className="flex flex-col gap-1">
+              <span className="text-[0.7rem] font-semibold uppercase tracking-wider text-subtle">
+                Date
+              </span>
+              <input
+                type="date"
+                min={todayStr}
+                value={dateValue}
+                onChange={(e) => setDateValue(e.target.value)}
+                className="h-11 rounded-xl border border-border-strong bg-surface px-3 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/15"
+              />
+            </label>
+          )}
+        </div>
+      )}
     </div>
   );
 }

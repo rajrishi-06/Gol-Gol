@@ -1,11 +1,10 @@
-// MapPicker.tsx
-import React, { useRef, useEffect, useState } from 'react';
-import mapboxgl, {GeolocateControl} from 'mapbox-gl';
-import axios from 'axios';
-import { Crosshair } from 'lucide-react';
-import 'mapbox-gl/dist/mapbox-gl.css';
-
-mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_GL_API;
+import React, { useRef, useEffect, useState } from "react";
+import mapboxgl from "mapbox-gl";
+import { Crosshair, ArrowLeft, Check, Search } from "lucide-react";
+import "mapbox-gl/dist/mapbox-gl.css";
+import { MAP_STYLE } from "../lib/mapbox";
+import { computeBounds } from "../lib/geo";
+import { reverseGeocode, forwardGeocode } from "../lib/geocoding";
 
 interface MapPickerProps {
   setLoc: (value: string) => void;
@@ -18,122 +17,73 @@ interface MapPickerProps {
 const MapPicker: React.FC<MapPickerProps> = ({ setLoc, setClickedLoc, setCords, initialCenter, mode }) => {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
-  const geolocateRef = useRef<GeolocateControl | null>(null);
 
   const [coords, setCoords] = useState({ lat: 0, lng: 0 });
-  const [searchInput, setSearchInput] = useState('');
+  const [searchInput, setSearchInput] = useState("");
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [didUserType, setDidUserType] = useState(false);
+  const [ready, setReady] = useState(false);
 
-  // Tooltip state
-  const [tooltipVisible, setTooltipVisible] = useState(false);
-  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
-  const idleTimer = useRef<number | null>(null);
-
-  // Utility: compute 150km×150km bounds around a center
-  const computeBounds = (lat: number, lng: number) => {
-    const halfSideKm = 75; // half of 150 km
-    const degLat = halfSideKm / 111; // ~111 km per degree latitude
-    const degLng = halfSideKm / (111 * Math.cos((lat * Math.PI) / 180));
-    return {
-      sw: [lng - degLng, lat - degLat] as [number, number],
-      ne: [lng + degLng, lat + degLat] as [number, number],
-    };
-  };
-
-  // Initialize map, preferring `initialCenter` over geolocation
+  // Initialize map, preferring `initialCenter` over geolocation.
   useEffect(() => {
     let cancelled = false;
 
     async function init() {
       let lat: number, lng: number;
+      const valid =
+        initialCenter &&
+        Number.isFinite(initialCenter.lat) &&
+        Number.isFinite(initialCenter.lng) &&
+        (initialCenter.lat !== 0 || initialCenter.lng !== 0);
 
-      // 1) Decide center: Check if initialCenter has valid coordinates
-      if (initialCenter && 
-          typeof initialCenter.lat === 'number' && 
-          typeof initialCenter.lng === 'number' &&
-          !isNaN(initialCenter.lat) && 
-          !isNaN(initialCenter.lng)) {
-        lat = initialCenter.lat;
-        lng = initialCenter.lng;
-        console.log('Using initialCenter:', { lat, lng });
+      if (valid) {
+        lat = initialCenter!.lat;
+        lng = initialCenter!.lng;
       } else {
-        // fallback to browser geolocation
         try {
           const pos = await new Promise<GeolocationPosition>((res, rej) =>
-            navigator.geolocation.getCurrentPosition(res, rej)
+            navigator.geolocation.getCurrentPosition(res, rej, { enableHighAccuracy: true, timeout: 8000 })
           );
           lat = pos.coords.latitude;
           lng = pos.coords.longitude;
-          console.log('Using geolocation:', { lat, lng });
-        } catch (err) {
-          console.error('Geolocation/init error:', err);
-          alert('Unable to get location; map cannot initialize.');
-          return;
+        } catch {
+          // Fall back to a sensible default (New Delhi) instead of aborting.
+          lat = 28.6139;
+          lng = 77.209;
         }
       }
 
       if (cancelled) return;
       setCoords({ lat, lng });
 
-      // 2) Create map around that center
       const { sw, ne } = computeBounds(lat, lng);
       const map = new mapboxgl.Map({
         container: mapContainerRef.current!,
-        style: 'mapbox://styles/mapbox/streets-v11',
+        style: MAP_STYLE.streets,
         center: [lng, lat],
-        zoom: 12,
-        maxBounds: [sw, ne],
-        scrollZoom: { around: 'center' },
-        touchZoomRotate: { around: 'center' },
+        zoom: 13,
+        maxBounds: [sw, ne] as any,
+        attributionControl: false,
       });
       mapRef.current = map;
+      map.addControl(new mapboxgl.GeolocateControl({ positionOptions: { enableHighAccuracy: true }, trackUserLocation: true }), "bottom-right");
+      map.on("load", () => !cancelled && setReady(true));
 
-      // Add Geolocate control
-      const geolocateControl = new mapboxgl.GeolocateControl({
-        positionOptions: {
-          enableHighAccuracy: true,
-        },
-        trackUserLocation: true,
-        showUserHeading: true,
+      map.getCanvas().style.cursor = "grab";
+      map.on("mousedown", () => (map.getCanvas().style.cursor = "grabbing"));
+      map.on("mouseup", () => (map.getCanvas().style.cursor = "grab"));
+      map.on("move", () => {
+        const c = map.getCenter();
+        setCoords({ lat: c.lat, lng: c.lng });
       });
-      map.addControl(geolocateControl);
-      geolocateRef.current = geolocateControl;
-
-      // Grab/Grabbing cursor
-      map.getCanvas().style.cursor = 'grab';
-      map.on('mousedown', () => {
-        map.getCanvas().style.cursor = 'grabbing';
-      });
-      map.on('mouseup', () => {
-        map.getCanvas().style.cursor = 'grab';
-      });
-
-      // Update coords on move
-      map.on('move', () => {
-        const center = map.getCenter();
-        setCoords({ lat: center.lat, lng: center.lng });
-      });
-
-      // Reverse geocode after move ends
-      map.on('idle', async () => {
+      map.on("idle", async () => {
         if (didUserType) return;
         const { lat: cLat, lng: cLng } = map.getCenter();
         try {
-          const res = await axios.get(
-            `https://api.mapbox.com/geocoding/v5/mapbox.places/${cLng},${cLat}.json`,
-            {
-              params: {
-                access_token: mapboxgl.accessToken,
-                limit: 1,
-              },
-            }
-          );
-          if (res.data.features.length > 0) {
-            setSearchInput(res.data.features[0].place_name);
-          }
-        } catch (err) {
-          console.error('Reverse-geocode error:', err);
+          const place = await reverseGeocode(cLng, cLat);
+          if (place && !cancelled) setSearchInput(place);
+        } catch {
+          /* ignore reverse-geocode failures */
         }
       });
     }
@@ -143,9 +93,10 @@ const MapPicker: React.FC<MapPickerProps> = ({ setLoc, setClickedLoc, setCords, 
       cancelled = true;
       mapRef.current?.remove();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialCenter]);
 
-  // Fetch suggestions when typing
+  // Debounced forward-geocode as the user types.
   useEffect(() => {
     if (!didUserType || !mapRef.current) return;
     const trimmed = searchInput.trim();
@@ -153,37 +104,28 @@ const MapPicker: React.FC<MapPickerProps> = ({ setLoc, setClickedLoc, setCords, 
       setSuggestions([]);
       return;
     }
-    const timeout = setTimeout(async () => {
+    const t = setTimeout(async () => {
       const { sw, ne } = computeBounds(coords.lat, coords.lng);
       try {
-        const res = await axios.get(
-          `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(
-            trimmed
-          )}.json`,
-          {
-            params: {
-              access_token: mapboxgl.accessToken,
-              limit: 5,
-              bbox: `${sw[0]},${sw[1]},${ne[0]},${ne[1]}`,
-            },
-          }
-        );
-        setSuggestions(res.data.features);
+        setSuggestions(await forwardGeocode(trimmed, { bbox: [sw[0], sw[1], ne[0], ne[1]] }));
       } catch {
         setSuggestions([]);
       }
     }, 300);
-    return () => clearTimeout(timeout);
+    return () => clearTimeout(t);
   }, [searchInput, didUserType, coords]);
 
-  // Handlers
+  const flyTo = (lat: number, lng: number) => {
+    const { sw, ne } = computeBounds(lat, lng);
+    mapRef.current!.setMaxBounds([sw, ne] as any);
+    mapRef.current!.flyTo({ center: [lng, lat], zoom: 14, essential: true });
+    setCoords({ lat, lng });
+  };
+
   const handleSuggestionClick = (place: any) => {
     const [lng, lat] = place.center;
-    const { sw, ne } = computeBounds(lat, lng);
     setSearchInput(place.place_name);
-    mapRef.current!.setMaxBounds([sw, ne]);
-    mapRef.current!.flyTo({ center: [lng, lat], zoom: 14 });
-    setCoords({ lat, lng });
+    flyTo(lat, lng);
     setSuggestions([]);
     setDidUserType(false);
   };
@@ -191,40 +133,19 @@ const MapPicker: React.FC<MapPickerProps> = ({ setLoc, setClickedLoc, setCords, 
   const handleSearch = async () => {
     const trimmed = searchInput.trim();
     if (!trimmed || !mapRef.current) return;
-
-    const coordMatch = trimmed.match(
-      /^([-+]?\d{1,2}(?:\.\d+)?),\s*([-+]?\d{1,3}(?:\.\d+)?)$/
-    );
-    if (coordMatch) {
-      const lat = parseFloat(coordMatch[1]);
-      const lng = parseFloat(coordMatch[2]);
-      const { sw, ne } = computeBounds(lat, lng);
-      mapRef.current!.setMaxBounds([sw, ne]);
-      mapRef.current!.flyTo({ center: [lng, lat], zoom: 14 });
-      setCoords({ lat, lng });
+    const m = trimmed.match(/^([-+]?\d{1,2}(?:\.\d+)?),\s*([-+]?\d{1,3}(?:\.\d+)?)$/);
+    if (m) {
+      flyTo(parseFloat(m[1]), parseFloat(m[2]));
       setSuggestions([]);
     } else if (suggestions.length > 0) {
       handleSuggestionClick(suggestions[0]);
     } else {
       const { sw, ne } = computeBounds(coords.lat, coords.lng);
       try {
-        const res = await axios.get(
-          `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(
-            trimmed
-          )}.json`,
-          {
-            params: {
-              access_token: mapboxgl.accessToken,
-              limit: 1,
-              bbox: `${sw[0]},${sw[1]},${ne[0]},${ne[1]}`,
-            },
-          }
-        );
-        if (res.data.features.length > 0) {
-          handleSuggestionClick(res.data.features[0]);
-        }
-      } catch (err) {
-        console.error('Search error:', err);
+        const results = await forwardGeocode(trimmed, { bbox: [sw[0], sw[1], ne[0], ne[1]], limit: 1 });
+        if (results[0]) handleSuggestionClick(results[0]);
+      } catch {
+        /* ignore */
       }
     }
     setDidUserType(false);
@@ -232,134 +153,105 @@ const MapPicker: React.FC<MapPickerProps> = ({ setLoc, setClickedLoc, setCords, 
 
   const handleCurrentLocation = () => {
     if (!navigator.geolocation || !mapRef.current) return;
-    const map = mapRef.current;
     navigator.geolocation.getCurrentPosition(
-      ({ coords: { latitude: lat, longitude: lng } }) => {
-        const { sw, ne } = computeBounds(lat, lng);
-        setCoords({ lat, lng });
-        map.setMaxBounds([sw, ne]);
-        map?.flyTo({ center: [lng, lat], zoom: 14 });
-        setSearchInput(`${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+      ({ coords: { latitude, longitude } }) => {
+        flyTo(latitude, longitude);
+        setSearchInput(`${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
         setSuggestions([]);
         setDidUserType(false);
       },
-      (err) => {
-        console.error('Geolocation error:', err);
-        alert('Unable to retrieve your location.');
-      }
+      () => {}
     );
   };
 
-  // Tooltip: show after 3s of no move, hide immediately on any move or leave
-  const onMapMouseMove = (e: React.MouseEvent) => {
-    setTooltipPos({ x: e.clientX + 12, y: e.clientY + 12 });
-
-    if (tooltipVisible) {
-      setTooltipVisible(false);
-    }
-
-    if (idleTimer.current !== null) {
-      clearTimeout(idleTimer.current);
-    }
-    idleTimer.current = window.setTimeout(() => {
-      setTooltipVisible(true);
-    }, 3000);
-  };
-
-  const onMapMouseLeave = () => {
-    if (idleTimer.current !== null) {
-      clearTimeout(idleTimer.current);
-    }
-    setTooltipVisible(false);
-  };
-
-  const handleOk = () => {
+  const handleConfirm = () => {
     setLoc(searchInput);
     setCords({ lat: coords.lat, lng: coords.lng });
     setClickedLoc(false);
   };
 
   return (
-    <div className="hidden sm:block flex-1 h-screen relative">
-      <div
-        ref={mapContainerRef}
-        className="absolute top-0 left-0 w-full h-full"
-        onMouseMove={onMapMouseMove}
-        onMouseLeave={onMapMouseLeave}
-      />
+    <div className="fixed inset-0 z-50 flex-1 sm:relative sm:inset-auto sm:z-auto sm:block">
+      <div ref={mapContainerRef} className="absolute inset-0 h-full w-full" />
 
-      {tooltipVisible && (
-        <div
-          className="absolute bg-black text-white text-xs px-2 py-1 rounded pointer-events-none z-50"
-          style={{
-            top: tooltipPos.y-450,
-            left: tooltipPos.x+10,
-            transform: 'translate(-50%, -100%)',
-          }}
-        >
-          Move map to adjust location
-        </div>
-      )}
-
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-full z-10 pointer-events-none">
-        {mode === "from" ? (
-          <img src="/icons/pickup.svg" alt="from marker" className="h-10 w-10" />
-        ) : (
-          <img src="/icons/destination.svg" alt="to marker" className="h-10 w-10" />
-        )}
-      </div>
-
-      <div className="absolute bottom-4 left-4 bg-white p-2 rounded shadow-md z-20">
-        <input
-          type="text"
-          readOnly
-          className="border px-2 py-1 w-72 text-sm"
-          value={`${coords.lat.toFixed(6)}, ${coords.lng.toFixed(6)}`}
-        />
-      </div>
-
-      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 w-[90%] max-w-lg">
-        <div className="flex flex-col bg-white shadow rounded overflow-visible relative">
-          <div className="flex items-center">
+      {/* Top search bar */}
+      <div className="absolute inset-x-0 top-0 z-30 p-3 sm:p-4">
+        <div className="mx-auto flex w-full max-w-xl items-center gap-2 rounded-2xl border border-border bg-surface/95 p-1.5 shadow-floating backdrop-blur">
+          <button
+            onClick={() => setClickedLoc(false)}
+            aria-label="Cancel and go back"
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-muted transition-colors hover:bg-surface-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </button>
+          <div className="relative flex flex-1 items-center">
+            <Search className="pointer-events-none absolute left-2 h-4 w-4 text-subtle" />
             <input
               type="text"
-              className="flex-grow px-4 py-2 text-sm outline-none"
-              placeholder="Enter coordinates or place"
               value={searchInput}
               onChange={(e) => {
                 setSearchInput(e.target.value);
                 setDidUserType(true);
               }}
-              onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+              onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+              placeholder={`Search ${mode === "from" ? "pickup" : "drop"} location`}
+              aria-label="Search location"
+              className="w-full rounded-lg bg-transparent py-2 pl-8 pr-2 text-sm text-foreground placeholder:text-subtle focus:outline-none"
             />
-            <button
-              onClick={handleCurrentLocation}
-              aria-label="Locate me"
-              className="ml-2 p-2 bg-white text-black text-sm hover:bg-blue-700 hover:text-white rounded"
-            >
-              <Crosshair size={16} />
-            </button>
-            <button
-              onClick={handleOk}
-              className="ml-2 p-2 bg-green-600 text-white text-sm hover:bg-green-700 rounded"
-            >
-              Ok
-            </button>
           </div>
+          <button
+            onClick={handleCurrentLocation}
+            aria-label="Use my current location"
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-muted transition-colors hover:bg-primary-subtle hover:text-primary-subtle-fg focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <Crosshair className="h-5 w-5" />
+          </button>
+        </div>
 
-          {suggestions.length > 0 && (
-            <div className="absolute top-full left-0 right-0 bg-white border-t z-20 shadow-md max-h-40 overflow-auto">
-              {suggestions.map((sugg, idx) => (
-                <div
-                  key={idx}
-                  onClick={() => handleSuggestionClick(sugg)}
-                  className="px-4 py-2 text-sm hover:bg-gray-100 cursor-pointer"
+        {suggestions.length > 0 && (
+          <ul className="mx-auto mt-2 max-w-xl overflow-hidden rounded-2xl border border-border bg-surface shadow-floating">
+            {suggestions.map((s, i) => (
+              <li key={i}>
+                <button
+                  onClick={() => handleSuggestionClick(s)}
+                  className="flex w-full items-start gap-2 px-4 py-2.5 text-left text-sm text-foreground transition-colors hover:bg-surface-2 focus-visible:bg-surface-2 focus-visible:outline-none"
                 >
-                  {sugg.place_name}
-                </div>
-              ))}
-            </div>
-          )}
+                  <Search className="mt-0.5 h-3.5 w-3.5 shrink-0 text-subtle" />
+                  <span className="line-clamp-2">{s.place_name}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {/* Centre pin */}
+      <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-full">
+        <img
+          src={mode === "from" ? "/icons/pickup.svg" : "/icons/destination.svg"}
+          alt=""
+          className="h-11 w-11 drop-shadow-lg"
+        />
+        <span className="mx-auto -mt-1 block h-1.5 w-1.5 rounded-full bg-black/30 blur-[1px]" />
+      </div>
+
+      {/* Bottom confirm sheet */}
+      <div className="absolute inset-x-0 bottom-0 z-30 p-3 sm:p-4">
+        <div className="mx-auto w-full max-w-xl rounded-2xl border border-border bg-surface/95 p-3 shadow-floating backdrop-blur">
+          <p className="text-[0.7rem] font-semibold uppercase tracking-wider text-subtle">
+            {mode === "from" ? "Pickup" : "Drop"} location
+          </p>
+          <p className="mt-0.5 truncate text-sm text-foreground">
+            {searchInput || `${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)}`}
+          </p>
+          <button
+            onClick={handleConfirm}
+            disabled={!ready}
+            className="mt-3 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary font-medium text-primary-fg shadow-brand transition-all hover:bg-primary-hover hover:-translate-y-px disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <Check className="h-4 w-4" />
+            Confirm {mode === "from" ? "pickup" : "drop"}
+          </button>
         </div>
       </div>
     </div>

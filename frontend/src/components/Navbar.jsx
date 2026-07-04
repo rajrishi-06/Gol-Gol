@@ -1,133 +1,166 @@
-import React, { useState } from 'react';
-import {Link} from 'react-router-dom';
-import { useNavigate } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { Menu, X, Car, Navigation, LifeBuoy, FileText, Sparkles } from "lucide-react";
+import Button from "./ui/Button";
+import Logo from "./ui/Logo";
+import ThemeToggle from "./ui/ThemeToggle";
+import { cn } from "../lib/cn";
 
-export default function Navbar(props) {
+const NAV_LINKS = [
+  { to: "/", label: "Book a ride", icon: Car },
+  { to: "/driver/activate", label: "Drive with Gol·Gol", icon: Navigation },
+];
+
+export default function Navbar({ logIn }) {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
+  const drawerRef = useRef(null);
+  const triggerRef = useRef(null);
 
-  // navigate to login page used in login button on navbar
-  function handelClickLogin(){
-    navigate("/login");
-  };
-  function handelClickDashboard(){
-    navigate("/dashboard");
-  };
+  // Accessible drawer: lock scroll, close on Escape, trap + restore focus.
+  useEffect(() => {
+    if (!open) return;
+    const previouslyFocused = document.activeElement;
+    document.body.style.overflow = "hidden";
+    const firstFocusable = drawerRef.current?.querySelector("a, button");
+    firstFocusable?.focus();
+
+    const onKey = (e) => {
+      if (e.key === "Escape") setOpen(false);
+      if (e.key === "Tab") {
+        const nodes = drawerRef.current?.querySelectorAll("a, button");
+        if (!nodes?.length) return;
+        const first = nodes[0];
+        const last = nodes[nodes.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = "";
+      previouslyFocused instanceof HTMLElement && previouslyFocused.focus();
+    };
+  }, [open]);
 
   return (
     <>
-      {/* Navbar */}
-      <nav className="relative flex items-center p-4 bg-white shadow">
-        {/* Toggle Button */}
-        <button
-          className="absolute left-4 p-2 focus:outline-none"
-          onClick={() => setOpen(true)}
-          aria-label="Open menu"
-        >
-          {/* Hamburger icon */}
-          <svg
-            className="h-6 w-6 text-gray-700"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
+      <nav className="glass sticky top-0 z-40 -mx-6 flex items-center justify-between border-b border-border px-6 py-3.5">
+        <Link to="/" className="rounded-lg" aria-label="Gol-Gol home">
+          <Logo />
+        </Link>
+
+        <div className="flex items-center gap-1.5">
+          <ThemeToggle />
+          <Button
+            variant={logIn ? "secondary" : "primary"}
+            size="sm"
+            onClick={() => navigate(logIn ? "/dashboard" : "/login")}
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M4 6h16M4 12h16M4 18h16"
-            />
-          </svg>
-        </button>
-
-        {/* Brand (centered) */}
-        <div className="mx-auto flex items-center space-x-2 font-bold text-xl text-gray-900">
-          <img src="/logo.svg" alt="Logo" className="h-8 w-8" />
-          <span>Gol Gol</span>
-        </div>
-
-
-        {/* Login Button */}
-        {!props.logIn ? <div className="absolute right-4">
-          <button onClick={handelClickLogin}  className="text-sm text-gray-600 hover:text-black focus:outline-none">
-            LOG IN
-          </button>
-        </div> : 
-        <div className="absolute right-4">
-          <button onClick={handelClickDashboard} className="text-sm text-gray-600 hover:text-black focus:outline-none">
-            Dashboard
+            {logIn ? "Dashboard" : "Log in"}
+          </Button>
+          <button
+            ref={triggerRef}
+            type="button"
+            onClick={() => setOpen(true)}
+            aria-label="Open menu"
+            aria-expanded={open}
+            aria-haspopup="dialog"
+            className="ml-0.5 inline-flex h-10 w-10 items-center justify-center rounded-xl text-muted transition-colors hover:bg-surface-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <Menu className="h-5 w-5" />
           </button>
         </div>
-        }
-        
       </nav>
 
-      {/* Overlay & Drawer */}
-      {open && (
-        <div className="fixed inset-0 z-50 flex">
-          {/* Backdrop */}
-          <div
-            className="absolute inset-0 bg-black opacity-50"
-            onClick={() => setOpen(false)}
-          />
-
-          {/* Side Drawer */}
-          <div className="relative w-64 bg-white h-full shadow-xl overflow-auto">
-            {/* Close button */}
-          <div className="flex justify-end p-4 pb-0">
+      {/* Drawer */}
+      <div
+        className={cn(
+          "fixed inset-0 z-50 lg:z-50",
+          open ? "pointer-events-auto" : "pointer-events-none"
+        )}
+        aria-hidden={!open}
+      >
+        <div
+          onClick={() => setOpen(false)}
+          className={cn(
+            "absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity duration-300",
+            open ? "opacity-100" : "opacity-0"
+          )}
+        />
+        <div
+          ref={drawerRef}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Main menu"
+          className={cn(
+            "absolute left-0 top-0 flex h-full w-[86%] max-w-xs flex-col bg-surface shadow-floating transition-transform duration-300 ease-[var(--ease-out-quart)]",
+            open ? "translate-x-0" : "-translate-x-full"
+          )}
+        >
+          <div className="flex items-center justify-between border-b border-border px-5 py-4">
+            <Logo />
             <button
               onClick={() => setOpen(false)}
               aria-label="Close menu"
-              className="p-2 rounded-md hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-muted transition-colors hover:bg-surface-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
             >
-              <svg
-                className="w-6 h-6 text-gray-700"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              </svg>
+              <X className="h-5 w-5" />
             </button>
           </div>
 
-            {/* Drawer Content */}
-            <div className="p-6 ">
-              <ul className="space-y-6 text-gray-800">
-                <li className="flex items-center space-x-3 hover:bg-gray-100 p-2 rounded">
-                  <Link to="/driver/activate"  onClick={() => setOpen(false)} > <span>🚗</span> <span>Activate as Driver</span> </Link> <Link/>
-                </li>
-                <li className="flex items-center space-x-3 hover:bg-gray-100 p-2 rounded">
-                  <Link to="/"  onClick={() => setOpen(false)} > <span>🚗</span> <span>Book your ride</span> </Link> <Link/>
-                </li>
-                {/* <li className="flex items-center space-x-3 hover:bg-gray-100 p-2 rounded">
-                  <Link to="/findride"  onClick={() => setOpen(false)} > <span>🚗</span> <span>Find A Ride</span> </Link>
-                </li>
-                <li className="flex items-center space-x-3 hover:bg-gray-100 p-2 rounded">
-                  <Link to="/publishride"  onClick={() => setOpen(false)} > <span>🚗</span> <span>Publish A Ride</span> </Link>
-                </li> */}
-                <li className="flex items-center space-x-3 hover:bg-gray-100 p-2 rounded">
-                  <span>🛟</span>
-                  <span>Support</span>
-                </li>
-              </ul>
+          <nav className="flex-1 overflow-y-auto p-3">
+            <p className="px-3 pb-1 pt-2 text-xs font-semibold uppercase tracking-wider text-subtle">
+              Navigate
+            </p>
+            {NAV_LINKS.map(({ to, label, icon: Icon }) => (
+              <Link
+                key={label}
+                to={to}
+                onClick={() => setOpen(false)}
+                className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-surface-2 focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <span className="grid h-9 w-9 place-items-center rounded-lg bg-primary-subtle text-primary-subtle-fg">
+                  <Icon className="h-[18px] w-[18px]" />
+                </span>
+                {label}
+              </Link>
+            ))}
+            <p className="px-3 pb-1 pt-4 text-xs font-semibold uppercase tracking-wider text-subtle">
+              Help
+            </p>
+            <a
+              href="mailto:support@gol-gol.app"
+              onClick={() => setOpen(false)}
+              className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-surface-2 focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <span className="grid h-9 w-9 place-items-center rounded-lg bg-surface-2 text-muted">
+                <LifeBuoy className="h-[18px] w-[18px]" />
+              </span>
+              Support
+            </a>
+          </nav>
 
-              {/* Footer links */}
-              <div className="absolute bottom-6 left-6 text-xs text-gray-500">
-                <a href="#" className="hover:underline">
-                  Terms of Service
-                </a>
-                <div className="mt-2">© 2025</div>
-              </div>
+          <div className="border-t border-border p-5">
+            <div className="flex items-center gap-2 text-sm text-muted">
+              <Sparkles className="h-4 w-4 text-primary" />
+              City mobility, reimagined
+            </div>
+            <div className="mt-3 flex items-center gap-4 text-xs text-subtle">
+              <a href="#" className="inline-flex items-center gap-1 hover:text-foreground">
+                <FileText className="h-3.5 w-3.5" /> Terms
+              </a>
+              <span>© {new Date().getFullYear()} Gol·Gol</span>
             </div>
           </div>
         </div>
-      )}
+      </div>
     </>
   );
 }

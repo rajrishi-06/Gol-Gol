@@ -1,382 +1,288 @@
-import React, { useEffect, useState } from 'react';
-import { supabase } from '../../server/supabase'; // Assuming this path is correct
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { CheckCircle2, ShieldCheck, ExternalLink } from "lucide-react";
+import { supabase } from "../../lib/supabase";
+import { DRIVER_VEHICLE_TYPES } from "../../lib/vehicles";
+import Logo from "../ui/Logo";
+import Button from "../ui/Button";
+import Field, { Input, Select } from "../ui/Field";
+import Alert from "../ui/Alert";
+import Skeleton from "../ui/Skeleton";
+
+const panel =
+  "flex h-[100dvh] w-full flex-col overflow-y-auto bg-background px-6 pb-8 sm:w-[500px] sm:shrink-0 sm:border-r sm:border-border lg:w-[540px]";
+
+const GUIDELINES = [
+  "Ensure your documents are valid and legible.",
+  "Keep your vehicle in good working condition.",
+  "Track all your trips from the driver dashboard.",
+  "Reach out to support if you face any issues.",
+];
 
 export default function DriverLeftPanel() {
   const [userData, setUserData] = useState(null);
   const [driverData, setDriverData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [message, setMessage] = useState(null); // For success/info messages
+  const [message, setMessage] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
 
-  // Form states
-  const [isRegistering, setIsRegistering] = useState(false);
-  const [licenseNumber, setLicenseNumber] = useState('');
-  const [licenseExpiry, setLicenseExpiry] = useState(''); // YYYY-MM-DD
-  const [vehicleRegistration, setVehicleRegistration] = useState('');
-  const [vehicleType, setVehicleType] = useState('');
-  const [documentUrlInput, setDocumentUrlInput] = useState('');
-
+  const [form, setForm] = useState({
+    licenseNumber: "",
+    licenseExpiry: "",
+    vehicleRegistration: "",
+    vehicleType: "",
+    documentUrl: "",
+  });
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
   const navigate = useNavigate();
 
-  const VEHICLE_TYPES = ['car', 'bike', 'auto', 'van', 'truck'];
-
   useEffect(() => {
-    async function fetchData() {
+    (async () => {
       setLoading(true);
       setError(null);
-      setMessage(null);
       try {
-        const userUuid = localStorage.getItem('user_uuid');
-
+        const userUuid = localStorage.getItem("user_uuid");
         if (!userUuid) {
-          setError("User ID not found in local storage. Please log in.");
+          setError("Please sign in to continue.");
           setLoading(false);
           return;
         }
-
-        // Fetch user data
         const { data: user, error: userError } = await supabase
-          .from('users')
-          .select('is_driver')
-          .eq('id', userUuid)
+          .from("users")
+          .select("is_driver")
+          .eq("id", userUuid)
           .single();
-
-        if (userError) {
-          throw userError;
-        }
-
+        if (userError) throw userError;
         setUserData(user);
 
-        // If user is a driver, fetch driver data
         if (user?.is_driver) {
           const { data: driver, error: driverError } = await supabase
-            .from('drivers')
-            .select('verification_status, license_number, license_expiry, vehicle_registration, vehicle_type, document_url')
-            .eq('user_id', userUuid)
+            .from("drivers")
+            .select("verification_status, license_number, license_expiry, vehicle_registration, vehicle_type, document_url")
+            .eq("user_id", userUuid)
             .single();
-
-          // It's possible for a user to have is_driver=true but no driver record if something went wrong.
-          // We don't throw an error here, as the UI will let them register.
-          if (driverError && driverError.code !== 'PGRST116') { // Ignore "no rows found" error
-            throw driverError;
-          }
+          if (driverError && driverError.code !== "PGRST116") throw driverError;
           setDriverData(driver);
 
-          // Redirect if driver is approved
-          if (driver?.verification_status === 'approved') {
-            navigate('/driver/dashboard');
-          } else if (driver?.verification_status === 'rejected') {
-            // Pre-fill form for reapplication if rejected
-            setLicenseNumber(driver.license_number || '');
-            setLicenseExpiry(driver.license_expiry || '');
-            setVehicleRegistration(driver.vehicle_registration || '');
-            setVehicleType(driver.vehicle_type || '');
-            setDocumentUrlInput(driver.document_url || '');
+          if (driver?.verification_status === "approved") navigate("/driver/dashboard");
+          else if (driver?.verification_status === "rejected") {
+            setForm({
+              licenseNumber: driver.license_number || "",
+              licenseExpiry: driver.license_expiry || "",
+              vehicleRegistration: driver.vehicle_registration || "",
+              vehicleType: driver.vehicle_type || "",
+              documentUrl: driver.document_url || "",
+            });
           }
         }
-      } catch (err) {
-        console.error("Error fetching data:", err.message);
-        setError("Failed to load data. Please try again.");
+      } catch {
+        setError("Failed to load your data. Please try again.");
       } finally {
         setLoading(false);
       }
-    }
-
-    fetchData();
+    })();
   }, [navigate]);
 
-
-  const handleSubmitDriverDetails = async (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    setLoading(true);
     setError(null);
     setMessage(null);
 
-    if (!licenseNumber || !licenseExpiry || !vehicleRegistration || !vehicleType || !documentUrlInput) {
-      setError("Please fill in all required fields, including the document URL.");
-      setLoading(false);
-      return;
+    if (!form.licenseNumber || !form.licenseExpiry || !form.vehicleRegistration || !form.vehicleType || !form.documentUrl) {
+      return setError("Please fill in all fields, including the document link.");
     }
-    if (!VEHICLE_TYPES.includes(vehicleType)) {
-        setError("Invalid vehicle type selected.");
-        setLoading(false);
-        return;
-    }
-
+    if (!DRIVER_VEHICLE_TYPES.includes(form.vehicleType)) return setError("Please select a valid vehicle type.");
     try {
-        new URL(documentUrlInput);
-    } catch (urlError) {
-        setError("Please enter a valid URL for your document.");
-        setLoading(false);
-        return;
+      new URL(form.documentUrl);
+    } catch {
+      return setError("Please enter a valid document URL.");
     }
 
-
+    setSubmitting(true);
     try {
-      const userUuid = localStorage.getItem('user_uuid');
-      if (!userUuid) {
-        throw new Error("User ID not found.");
-      }
-
-      const documentUrl = documentUrlInput;
-
-      const driverDetails = {
+      const userUuid = localStorage.getItem("user_uuid");
+      const details = {
         user_id: userUuid,
-        license_number: licenseNumber,
-        license_expiry: licenseExpiry,
-        vehicle_registration: vehicleRegistration,
-        vehicle_type: vehicleType,
-        document_url: documentUrl,
-        verification_status: 'pending', // Always set to pending upon submission/re-submission
+        license_number: form.licenseNumber,
+        license_expiry: form.licenseExpiry,
+        vehicle_registration: form.vehicleRegistration,
+        vehicle_type: form.vehicleType,
+        document_url: form.documentUrl,
+        verification_status: "pending",
       };
 
-      // Check if driver entry exists (for reapplication)
-      const { data: existingDriver, error: existingDriverError } = await supabase
-        .from('drivers')
-        .select('user_id')
-        .eq('user_id', userUuid)
+      const { data: existing, error: existingError } = await supabase
+        .from("drivers")
+        .select("user_id")
+        .eq("user_id", userUuid)
         .single();
+      if (existingError && existingError.code !== "PGRST116") throw existingError;
 
-      if (existingDriverError && existingDriverError.code !== 'PGRST116') { // PGRST116 means "no rows found"
-          throw existingDriverError;
-      }
-
-      if (existingDriver) {
-        // Update existing driver record for re-application
-        const { error: updateError } = await supabase
-          .from('drivers')
-          .update(driverDetails)
-          .eq('user_id', userUuid);
-
+      if (existing) {
+        const { error: updateError } = await supabase.from("drivers").update(details).eq("user_id", userUuid);
         if (updateError) throw updateError;
-        setMessage("Driver details updated successfully. Verification is pending.");
-
       } else {
-        // This block runs for a user's FIRST submission.
-        // Step 1: Insert new driver record
-        const { error: insertError } = await supabase
-          .from('drivers')
-          .insert([driverDetails]);
-
+        const { error: insertError } = await supabase.from("drivers").insert([details]);
         if (insertError) throw insertError;
-
-        // Step 2: CRITICAL - Update the 'users' table to set is_driver = true.
-        // If this step fails, the app won't recognize the user as a driver on future visits.
-        // COMMON ISSUE: Check your Row Level Security (RLS) policies on the 'users' table.
-        // The authenticated user needs permission to update their own 'is_driver' column.
-        const { error: updateUserError } = await supabase
-          .from('users')
-          .update({ is_driver: true })
-          .eq('id', userUuid);
-
-        if (updateUserError) {
-          console.error("CRITICAL: Failed to update is_driver flag for user:", userUuid, updateUserError);
-          throw new Error(`Driver profile was created, but failed to mark you as a driver. Please contact support. Error: ${updateUserError.message}`);
-        }
-        
-        setMessage("Driver details submitted successfully. Verification is pending.");
+        const { error: flagError } = await supabase.from("users").update({ is_driver: true }).eq("id", userUuid);
+        if (flagError) throw new Error("Profile created, but we couldn't mark you as a driver. Contact support.");
       }
 
-      // Re-fetch all data to ensure UI is in sync with the database
-      const { data: updatedUser, error: updatedUserError } = await supabase
-        .from('users')
-        .select('is_driver')
-        .eq('id', userUuid)
-        .single();
-
-      if (updatedUserError) throw updatedUserError;
+      setMessage("Application submitted. Verification is pending.");
+      const { data: updatedUser } = await supabase.from("users").select("is_driver").eq("id", userUuid).single();
       setUserData(updatedUser);
-
-      if (updatedUser?.is_driver) {
-        const { data: updatedDriver, error: updatedDriverError } = await supabase
-          .from('drivers')
-          .select('verification_status, license_number, license_expiry, vehicle_registration, vehicle_type, document_url')
-          .eq('user_id', userUuid)
-          .single();
-
-        if (updatedDriverError) throw updatedDriverError;
-        setDriverData(updatedDriver);
-      }
-
-      setIsRegistering(false); // Go back to the info view after submission
-
+      const { data: updatedDriver } = await supabase
+        .from("drivers")
+        .select("verification_status, license_number, license_expiry, vehicle_registration, vehicle_type, document_url")
+        .eq("user_id", userUuid)
+        .single();
+      setDriverData(updatedDriver);
     } catch (err) {
-      console.error("Error submitting driver details:", err.message);
       setError(`Submission failed: ${err.message}`);
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   };
 
+  const Header = () => (
+    <header className="flex items-center justify-between py-4">
+      <Logo />
+      <span className="inline-flex items-center gap-1.5 text-xs text-subtle">
+        <ShieldCheck className="h-3.5 w-3.5" /> Driver onboarding
+      </span>
+    </header>
+  );
+
   if (loading) {
     return (
-      <div className="w-full sm:w-[550px] h-screen p-6 bg-white overflow-auto border-r border-gray-200 flex items-center justify-center">
-        <p>Loading user data...</p>
+      <div className={panel}>
+        <Header />
+        <div className="mt-4 space-y-3">
+          <Skeleton className="h-8 w-2/3" />
+          <Skeleton className="h-11 w-full" />
+          <Skeleton className="h-11 w-full" />
+          <Skeleton className="h-11 w-full" />
+        </div>
       </div>
     );
   }
 
-  if (error) {
+  const showForm =
+    (userData && !userData.is_driver) || (driverData && driverData.verification_status === "rejected");
+  const isReapplying = driverData?.verification_status === "rejected";
+
+  if (showForm) {
     return (
-      <div className="w-full sm:w-[550px] h-screen p-6 bg-white overflow-auto border-r border-gray-200">
-        <h3 className="text-xl font-semibold mb-2 text-red-600">Error</h3>
-        <p className="text-red-500">{error}</p>
-        <button
-          onClick={() => window.location.reload()}
-          className="mt-4 px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300"
-        >
-          Reload
-        </button>
-      </div>
-    );
-  }
+      <div className={panel}>
+        <Header />
+        <div className="animate-fade-up">
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+            {isReapplying ? "Reapply as a driver" : "Become a driver"}
+          </h1>
+          <p className="mt-1.5 text-sm text-muted">
+            Upload your license &amp; vehicle documents to a cloud drive and paste the shareable link below.
+          </p>
 
-  // --- Render based on user/driver status ---
+          {isReapplying && (
+            <Alert tone="warning" title="Action required" className="mt-4">
+              Your previous application wasn&apos;t approved. Review your details and resubmit.
+            </Alert>
+          )}
+          {message && <Alert tone="success" className="mt-4">{message}</Alert>}
+          {error && <Alert tone="danger" className="mt-4">{error}</Alert>}
 
-  // Show registration/reapplication form if user is not a driver OR if their application was rejected.
-  if ((userData && !userData.is_driver) || (driverData && driverData.verification_status === 'rejected')) {
-    const isReapplying = driverData && driverData.verification_status === 'rejected';
-    const formTitle = isReapplying ? "Reapply as a Driver" : "Register as a Driver";
-    const submitButtonText = isReapplying ? "Resubmit Application" : "Submit Application";
-
-    return (
-      <div className="w-full sm:w-[550px] h-screen p-6 bg-white overflow-auto border-r border-gray-200">
-        <h3 className="text-xl font-semibold mb-4">{formTitle}</h3>
-        
-        {/* --- NEW: Added clear message for rejected applications --- */}
-        {isReapplying && (
-            <div className="mb-4 p-3 bg-yellow-100 text-yellow-800 border-l-4 border-yellow-500 rounded-md" role="alert">
-                <p className="font-bold">Action Required</p>
-                <p>Your previous application was not approved. Please review your details, correct any errors, and resubmit.</p>
-            </div>
-        )}
-
-        {message && <div className="mb-4 p-3 bg-green-100 text-green-700 rounded-md">{message}</div>}
-        {/* Error message from form submission will appear here */}
-        {error && <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-md">{error}</div>}
-
-        <p className="text-gray-700 mb-4">
-          Please fill in the details below to join our driver network. For document submission, upload your license or vehicle documents to a cloud service (e.g., Google Drive, Dropbox) and provide the **shareable link** below.
-        </p>
-
-        <form onSubmit={handleSubmitDriverDetails} className="space-y-4">
-          <div>
-            <label htmlFor="licenseNumber" className="block text-sm font-medium text-gray-700">License Number</label>
-            <input
-              type="text"
-              id="licenseNumber"
-              value={licenseNumber}
-              onChange={(e) => setLicenseNumber(e.target.value)}
-              className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+          <form onSubmit={handleSubmit} className="mt-5 space-y-4">
+            <Field label="License number" required htmlFor="license">
+              {(a) => <Input {...a} value={form.licenseNumber} onChange={set("licenseNumber")} placeholder="DL-0420110149646" />}
+            </Field>
+            <Field label="License expiry" required htmlFor="expiry">
+              {(a) => <Input {...a} type="date" value={form.licenseExpiry} onChange={set("licenseExpiry")} />}
+            </Field>
+            <Field label="Vehicle registration" required htmlFor="reg">
+              {(a) => <Input {...a} value={form.vehicleRegistration} onChange={set("vehicleRegistration")} placeholder="MH 12 AB 3456" />}
+            </Field>
+            <Field label="Vehicle type" required htmlFor="vtype">
+              {(a) => (
+                <Select {...a} value={form.vehicleType} onChange={set("vehicleType")}>
+                  <option value="">Select a type</option>
+                  {DRIVER_VEHICLE_TYPES.map((t) => (
+                    <option key={t} value={t}>
+                      {t.charAt(0).toUpperCase() + t.slice(1)}
+                    </option>
+                  ))}
+                </Select>
+              )}
+            </Field>
+            <Field
+              label="Document link"
               required
-            />
-          </div>
-
-          <div>
-            <label htmlFor="licenseExpiry" className="block text-sm font-medium text-gray-700">License Expiry Date</label>
-            <input
-              type="date"
-              id="licenseExpiry"
-              value={licenseExpiry}
-              onChange={(e) => setLicenseExpiry(e.target.value)}
-              className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-              required
-            />
-          </div>
-
-          <div>
-            <label htmlFor="vehicleRegistration" className="block text-sm font-medium text-gray-700">Vehicle Registration Number</label>
-            <input
-              type="text"
-              id="vehicleRegistration"
-              value={vehicleRegistration}
-              onChange={(e) => setVehicleRegistration(e.target.value)}
-              className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-              required
-            />
-          </div>
-
-          <div>
-            <label htmlFor="vehicleType" className="block text-sm font-medium text-gray-700">Vehicle Type</label>
-            <select
-              id="vehicleType"
-              value={vehicleType}
-              onChange={(e) => setVehicleType(e.target.value)}
-              className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-              required
+              hint="Google Drive, Dropbox, etc. — make sure it's viewable."
+              htmlFor="doc"
             >
-              <option value="">Select a type</option>
-              {VEHICLE_TYPES.map(type => (
-                <option key={type} value={type}>{type.charAt(0).toUpperCase() + type.slice(1)}</option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label htmlFor="documentUrl" className="block text-sm font-medium text-gray-700">Document Shareable Link (Google Drive, Dropbox, etc.)</label>
-            <input
-              type="url"
-              id="documentUrl"
-              value={documentUrlInput}
-              onChange={(e) => setDocumentUrlInput(e.target.value)}
-              placeholder="e.g., https://drive.google.com/..."
-              className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-              required
-            />
+              {(a) => <Input {...a} type="url" value={form.documentUrl} onChange={set("documentUrl")} placeholder="https://drive.google.com/…" />}
+            </Field>
             {driverData?.document_url && (
-                <p className="mt-2 text-sm text-gray-500">
-                    Existing document URL:
-                    <a href={driverData.document_url} target="_blank" rel="noopener noreferrer" className="ml-2 text-blue-600 hover:underline">View Current Document</a>
-                </p>
+              <a
+                href={driverData.document_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+              >
+                <ExternalLink className="h-3.5 w-3.5" /> View current document
+              </a>
             )}
-          </div>
-
-          <button
-            type="submit"
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50"
-            disabled={loading}
-          >
-            {loading ? 'Submitting...' : submitButtonText}
-          </button>
-        </form>
+            <Button type="submit" fullWidth size="lg" loading={submitting}>
+              {isReapplying ? "Resubmit application" : "Submit application"}
+            </Button>
+          </form>
+        </div>
       </div>
     );
   }
 
-  // Driver verification pending
-  if (userData?.is_driver && driverData?.verification_status === 'pending') {
+  if (userData?.is_driver && driverData?.verification_status === "pending") {
     return (
-      <div className="w-full sm:w-[550px] h-screen p-6 bg-white overflow-auto border-r border-gray-200">
-        <h3 className="text-xl font-semibold mb-4">Verification in Progress</h3>
-        {message && <div className="mb-4 p-3 bg-green-100 text-green-700 rounded-md">{message}</div>}
-        <p className="text-gray-700 mb-4">
-          Thanks for submitting your driver details! Our team is currently reviewing your application. We'll notify you once your verification is complete. This usually takes 1-2 business days.
-        </p>
-        <p className="text-gray-700">
-          In the meantime, please ensure all your submitted documents (provided via URL) are clear and accessible to our team.
-        </p>
-        <h3 className="text-xl font-semibold mb-2 mt-6">Driver Guidelines</h3>
-        <ul className="list-disc pl-5 space-y-1 text-gray-700">
-          <li>Ensure your documents are valid and legible.</li>
-          <li>Vehicle should be in good working condition.</li>
-          <li>Keep track of your trips in dashboard.</li>
-          <li>Contact support if you face any issues.</li>
+      <div className={panel}>
+        <Header />
+        <div className="animate-fade-up">
+          <div className="grid h-14 w-14 place-items-center rounded-2xl bg-warning-subtle text-warning-fg">
+            <CheckCircle2 className="h-7 w-7" />
+          </div>
+          <h1 className="mt-4 text-2xl font-semibold tracking-tight text-foreground">Verification in progress</h1>
+          <p className="mt-1.5 text-sm text-muted">
+            Thanks for applying! Our team is reviewing your documents — this usually takes 1–2 business days.
+          </p>
+          <div className="mt-6 rounded-2xl border border-border bg-surface p-5 shadow-soft">
+            <h2 className="text-sm font-semibold text-foreground">Driver guidelines</h2>
+            <ul className="mt-3 space-y-2">
+              {GUIDELINES.map((g) => (
+                <li key={g} className="flex items-start gap-2 text-sm text-muted">
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                  {g}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={panel}>
+      <Header />
+      <div className="animate-fade-up">
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">Driver guidelines</h1>
+        <ul className="mt-4 space-y-2">
+          {GUIDELINES.map((g) => (
+            <li key={g} className="flex items-start gap-2 text-sm text-muted">
+              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+              {g}
+            </li>
+          ))}
         </ul>
       </div>
-    );
-  }
-
-  // Default fallback view
-  return (
-    <div className="w-full sm:w-[550px] h-screen p-6 bg-white overflow-auto border-r border-gray-200">
-      <h3 className="text-xl font-semibold mb-2">Driver Guidelines</h3>
-      <ul className="list-disc pl-5 space-y-1 text-gray-700">
-        <li>Ensure your documents are valid and legible.</li>
-        <li>Vehicle should be in good working condition.</li>
-        <li>Keep track of your trips in dashboard.</li>
-        <li>Contact support if you face any issues.</li>
-      </ul>
     </div>
   );
 }

@@ -1,12 +1,11 @@
-import React, { useState } from 'react';
-import DriverLeftPanel from './DriverLeftPanel';
-import RightPanel from '../RightPanel'; // assume this exists
+import DriverLeftPanel from "./DriverLeftPanel";
+import RightPanel from "../RightPanel";
 
 export default function DriverActivate() {
   return (
-    <div className="flex flex-col sm:flex-row h-screen">
-        <DriverLeftPanel />
-        <RightPanel />
+    <div className="flex h-[100dvh] flex-col overflow-hidden sm:flex-row">
+      <DriverLeftPanel />
+      <RightPanel />
     </div>
   );
 }
