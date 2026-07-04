@@ -1,0 +1,9 @@
+# macOS
+.DS_Store
+
+# Logs
+*.log
+
+# Dependencies / build (see frontend/.gitignore for the app)
+node_modules
+dist

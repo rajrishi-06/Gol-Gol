@@ -2,16 +2,76 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+
+    <!-- Prevent theme flash: apply saved/OS theme before first paint. -->
+    <script>
+      (function () {
+        try {
+          var k = "golgol-theme";
+          var s = localStorage.getItem(k);
+          var t = s === "light" || s === "dark"
+            ? s
+            : (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+          document.documentElement.setAttribute("data-theme", t);
+        } catch (e) {}
+      })();
+    </script>
+
+    <title>Gol·Gol — Book, share &amp; drive rides across your city</title>
+    <meta
+      name="description"
+      content="Gol·Gol is a modern ride platform: book an instant cab, share a commute to split fares, or drive to earn. Upfront pricing, live tracking and rated drivers."
+    />
+    <meta name="theme-color" content="#ffffff" />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="canonical" href="https://gol-gol.app/" />
+
     <link rel="icon" type="image/svg+xml" href="/logo.svg" />
-    <link
-  rel="stylesheet"
-  href="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-directions/v4.1.1/mapbox-gl-directions.css"
-/>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Gol-Gol</title>
+    <link rel="apple-touch-icon" href="/logo.svg" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Gol·Gol" />
+    <meta property="og:title" content="Gol·Gol — Book, share &amp; drive rides across your city" />
+    <meta
+      property="og:description"
+      content="Book an instant cab, share a commute to split fares, or drive to earn. Upfront pricing, live tracking, rated drivers."
+    />
+    <meta property="og:url" content="https://gol-gol.app/" />
+    <meta property="og:image" content="/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Gol·Gol — Book, share &amp; drive rides" />
+    <meta
+      name="twitter:description"
+      content="Book an instant cab, share a commute, or drive to earn. Upfront pricing and live tracking."
+    />
+    <meta name="twitter:image" content="/og-image.png" />
+
+    <!-- Speed up first Mapbox/Supabase calls without blocking render. -->
+    <link rel="preconnect" href="https://api.mapbox.com" crossorigin />
+    <link rel="dns-prefetch" href="https://api.mapbox.com" />
+
+    <!-- Structured data -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "Gol·Gol",
+        "applicationCategory": "TravelApplication",
+        "operatingSystem": "Web",
+        "description": "Book an instant cab, share a commute to split fares, or drive to earn.",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "INR" }
+      }
+    </script>
   </head>
-  <body class="m-0 p-0 box-border">
-    <div id="root" class="h-screen w-full"></div>
+  <body>
+    <div id="root"></div>
+    <noscript>Gol·Gol needs JavaScript enabled to book and track rides.</noscript>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
