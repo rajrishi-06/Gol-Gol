@@ -147,7 +147,7 @@ create trigger on_auth_user_created
 grant usage on schema public to anon, authenticated;
 -- Login checks whether a mobile already exists before the user authenticates.
 grant select on public.users to anon;
-grant select, update on public.users to authenticated;
+grant select, insert, update on public.users to authenticated;
 grant select, insert, update, delete
   on public.drivers, public.active_drivers, public.rides,
      public.published_rides, public.ride_requests, public.chat_messages
@@ -164,6 +164,8 @@ alter table public.chat_messages    enable row level security;
 
 -- users: readable (for name lookups + login existence check); own row editable.
 create policy "users_select_all"   on public.users for select using (true);
+create policy "users_insert_own"   on public.users for insert to authenticated
+  with check (auth.uid() = id);
 create policy "users_update_own"   on public.users for update
   using (auth.uid() = id) with check (auth.uid() = id);
 

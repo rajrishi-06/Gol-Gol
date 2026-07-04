@@ -22,6 +22,7 @@ export default function Login({ setLogIn }) {
 
   const phoneIsValid = phone.length === 10;
   const otpIsValid = otp.length === 6;
+  const authPhone = phone.replace(/\D/g, "").slice(-10);
 
   // Resend cooldown.
   useEffect(() => {
@@ -31,7 +32,10 @@ export default function Login({ setLogIn }) {
   }, [resendIn]);
 
   const sendOtp = async (options) => {
-    const { error } = await supabase.auth.signInWithOtp({ phone: `+91${phone}`, ...options });
+    const { error } = await supabase.auth.signInWithOtp({
+      phone: authPhone,
+      options: { shouldCreateUser: true, ...options?.options },
+    });
     if (error) throw error;
     setResendIn(30);
   };
@@ -40,7 +44,12 @@ export default function Login({ setLogIn }) {
     setError("");
     setLoading(true);
     try {
-      const { data: existing } = await supabase.from("users").select("id").eq("mobile", phone).single();
+      const { data: existing, error: existingError } = await supabase
+        .from("users")
+        .select("id")
+        .eq("mobile", phone)
+        .maybeSingle();
+      if (existingError) throw existingError;
       if (existing) {
         setIsNewUser(false);
         await sendOtp();
@@ -82,8 +91,27 @@ export default function Login({ setLogIn }) {
       const {
         data: { session },
         error,
-      } = await supabase.auth.verifyOtp({ phone: `+91${phone}`, token: otp, type: "sms" });
+      } = await supabase.auth.verifyOtp({ phone: authPhone, token: otp, type: "sms" });
       if (error || !session) throw error || new Error("no session");
+
+      const { data: profile, error: profileLookupError } = await supabase
+        .from("users")
+        .select("id")
+        .eq("id", session.user.id)
+        .maybeSingle();
+      if (profileLookupError) throw profileLookupError;
+
+      if (!profile) {
+        const metadata = session.user.user_metadata || {};
+        const { error: profileError } = await supabase.from("users").insert({
+          id: session.user.id,
+          name: isNewUser ? name.trim() || "Rider" : metadata.name?.trim() || "Rider",
+          email: isNewUser ? email.trim() || null : metadata.email?.trim() || null,
+          mobile: authPhone,
+        });
+        if (profileError) throw profileError;
+      }
+
       setLogIn?.(true);
       navigate("/");
     } catch {
@@ -231,7 +259,7 @@ export default function Login({ setLogIn }) {
                   Verify your number
                 </h1>
                 <p className="mt-1.5 text-sm text-muted">
-                  Enter the code sent to <span className="font-medium text-foreground">+91 {phone}</span>
+                  Enter the code sent to <span className="font-medium text-foreground">+91 {authPhone}</span>
                 </p>
               </div>
               <div className="space-y-2">
