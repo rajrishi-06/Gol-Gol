@@ -66,8 +66,10 @@ const MapPicker: React.FC<MapPickerProps> = ({ setLoc, setClickedLoc, setCords, 
         attributionControl: false,
       });
       mapRef.current = map;
+      // The centre coordinate is valid immediately, so enable Confirm now
+      // rather than waiting on `load` (which never fires if tiles fail).
+      setReady(true);
       map.addControl(new mapboxgl.GeolocateControl({ positionOptions: { enableHighAccuracy: true }, trackUserLocation: true }), "bottom-right");
-      map.on("load", () => !cancelled && setReady(true));
 
       map.getCanvas().style.cursor = "grab";
       map.on("mousedown", () => (map.getCanvas().style.cursor = "grabbing"));
