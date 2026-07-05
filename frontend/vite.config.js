@@ -14,7 +14,7 @@ export default defineConfig({
       output: {
         manualChunks(id) {
           if (!id.includes("node_modules")) return;
-          if (id.includes("mapbox-gl")) return "mapbox";
+          if (id.includes("@googlemaps")) return "googlemaps";
           if (id.includes("@supabase")) return "supabase";
           if (id.includes("react-dom") || id.includes("react-router") || id.includes("/react/")) {
             return "react-vendor";

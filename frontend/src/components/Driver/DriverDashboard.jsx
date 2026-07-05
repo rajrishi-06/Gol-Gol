@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { MapPin, Route as RouteIcon, LogOut, Inbox } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { distanceKm } from "../../lib/geo";
+import { notifyUser } from "../../lib/notify";
 import { formatCurrency, formatDistance } from "../../lib/format";
 import RightPanel from "../RightPanel";
 import Logo from "../ui/Logo";
@@ -59,18 +60,14 @@ export default function DriverDashboard() {
 
   const fetchInitialRides = useCallback(async (location, vehicleType) => {
     if (!location || !vehicleType) return;
-    const { data: pendingRides, error } = await supabase
-      .from("rides")
-      .select("*")
-      .eq("status", "pending")
-      .eq("vehicle_type", vehicleType);
-    if (!error && pendingRides) {
-      // Fixed: previously passed the location object itself as `lat`.
-      const nearby = pendingRides.filter(
-        (r) => distanceKm(location, { lat: r.from_lat, lng: r.from_lng }) <= 5
-      );
-      setAvailableRides(nearby);
-    }
+    // Server-side matching (migration 0003): only nearby pending rides come back.
+    const { data: pendingRides, error } = await supabase.rpc("nearby_pending_rides", {
+      p_lat: location.lat,
+      p_lng: location.lng,
+      p_vehicle: vehicleType,
+      p_radius_km: 5,
+    });
+    if (!error && pendingRides) setAvailableRides(pendingRides);
     setLoading(false);
   }, []);
 
@@ -162,6 +159,13 @@ export default function DriverDashboard() {
         .from("active_drivers")
         .update({ on_ride: true, current_ride_id: rideId })
         .eq("user_id", driverId);
+      notifyUser({
+        userId: updatedRide.rider_id,
+        title: "Driver on the way 🚗",
+        body: `A ${driverDetails?.vehicle_type || "driver"} accepted your ride and is heading to you.`,
+        url: `/rider/ride/${rideId}`,
+        type: "ride_accepted",
+      });
       navigate(`/driver/ride/${rideId}`);
     }
     setAcceptingRideId(null);
@@ -200,13 +204,14 @@ export default function DriverDashboard() {
               description="Stay online — we'll ping you the moment a nearby rider needs a lift."
             />
           ) : (
-            availableRides.map((ride) => (
-              <RideRequestCard
-                key={ride.id}
-                ride={ride}
-                onAccept={handleAcceptRide}
-                isAccepting={acceptingRideId === ride.id}
-              />
+            availableRides.map((ride, i) => (
+              <div key={ride.id} className="animate-rise" style={{ "--i": i }}>
+                <RideRequestCard
+                  ride={ride}
+                  onAccept={handleAcceptRide}
+                  isAccepting={acceptingRideId === ride.id}
+                />
+              </div>
             ))
           )}
         </div>

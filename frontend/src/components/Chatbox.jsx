@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { Send } from "lucide-react";
 import { supabase } from "../lib/supabase";
+import { notifyUser } from "../lib/notify";
 import { cn } from "../lib/cn";
 
 /** Shared in-ride chat. Previously duplicated in both ride components. */
-export default function Chatbox({ rideId, userId, messages, title = "Chat" }) {
+export default function Chatbox({ rideId, userId, messages, title = "Chat", recipientId, recipientUrl }) {
   const [newMessage, setNewMessage] = useState("");
   const endRef = useRef(null);
 
@@ -18,6 +19,9 @@ export default function Chatbox({ rideId, userId, messages, title = "Chat" }) {
     if (!text || !userId) return;
     setNewMessage("");
     await supabase.from("chat_messages").insert({ ride_id: rideId, sender_id: userId, message: text });
+    if (recipientId) {
+      notifyUser({ userId: recipientId, title: "New message 💬", body: text, url: recipientUrl, type: "chat" });
+    }
   };
 
   return (

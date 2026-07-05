@@ -1,61 +1,79 @@
 import { useEffect, useRef } from "react";
-import "mapbox-gl/dist/mapbox-gl.css";
-import { mapboxgl, MAP_STYLE } from "../lib/mapbox";
+import {
+  loadGoogleMaps,
+  createMap,
+  drawRoutePolyline,
+  boundsFrom,
+} from "../lib/googlemaps";
 import { fetchRoute } from "../lib/geocoding";
 
 // Deterministic palette for per-rider legs.
 const RIDER_COLORS = ["#f97316", "#22c55e", "#3b82f6", "#ec4899", "#8b5cf6", "#14b8a6"];
 const colorFor = (i) => RIDER_COLORS[i % RIDER_COLORS.length];
 
-/** Route geometry for a set of coordinates (safe wrapper around Directions). */
-async function routeGeometry(coords) {
+/** A small colored dot marker (XSS-safe: name goes in the native `title` tooltip). */
+function dotMarker(map, color, position, title) {
+  const g = window.google.maps;
+  return new g.Marker({
+    position,
+    map,
+    title,
+    icon: {
+      path: g.SymbolPath.CIRCLE,
+      scale: 7,
+      fillColor: color,
+      fillOpacity: 1,
+      strokeColor: "#ffffff",
+      strokeWeight: 2,
+    },
+  });
+}
+
+/** Route geometry (GeoJSON coordinates) for a set of `[lng,lat]` points. */
+async function routeCoords(coords) {
   if (coords.length < 2) return null;
   const route = await fetchRoute(coords);
-  return route?.geometry ?? null;
+  return route?.geometry?.coordinates ?? null;
 }
 
 /** Preview of a driver's full multi-rider route. Desktop-only enhancement. */
 export default function DriverRoute({ ride }) {
   const mapContainerRef = useRef(null);
   const mapRef = useRef(null);
-  const markersRef = useRef([]);
+  const overlaysRef = useRef([]);
 
   useEffect(() => {
     if (!ride?.driver || !mapContainerRef.current) return;
+    let cancelled = false;
 
-    if (mapRef.current) {
-      markersRef.current.forEach((m) => m.remove());
-      markersRef.current = [];
-      mapRef.current.remove();
-    }
-
-    const driverStart = ride.driver?.driver_start;
-    const driverEnd = ride.driver?.driver_end;
-    mapRef.current = new mapboxgl.Map({
-      container: mapContainerRef.current,
-      style: MAP_STYLE.streets,
-      center: [driverStart?.lng || 77.209, driverStart?.lat || 28.6139],
-      zoom: 11,
-      attributionControl: false,
-    });
-    const map = mapRef.current;
-
-    const addMarker = (color, coords, text) => {
-      // setText (never setHTML) keeps user-supplied names from injecting markup.
-      const marker = new mapboxgl.Marker({ color })
-        .setLngLat(coords)
-        .setPopup(new mapboxgl.Popup({ offset: 18 }).setText(text))
-        .addTo(map);
-      markersRef.current.push(marker);
+    const clearOverlays = () => {
+      overlaysRef.current.forEach((o) => o.setMap(null));
+      overlaysRef.current = [];
     };
 
-    const draw = async () => {
+    (async () => {
+      await loadGoogleMaps();
+      if (cancelled || !mapContainerRef.current) return;
+
+      const driverStart = ride.driver?.driver_start;
+      const driverEnd = ride.driver?.driver_end;
+
+      if (!mapRef.current) {
+        mapRef.current = createMap(mapContainerRef.current, {
+          center: { lat: driverStart?.lat || 28.6139, lng: driverStart?.lng || 77.209 },
+          zoom: 11,
+        });
+      }
+      const map = mapRef.current;
+      clearOverlays();
+
       if (!driverStart?.lng || !driverEnd?.lng) return;
-      const bounds = new mapboxgl.LngLatBounds();
-      bounds.extend([driverStart.lng, driverStart.lat]);
-      bounds.extend([driverEnd.lng, driverEnd.lat]);
-      addMarker("#2563eb", [driverStart.lng, driverStart.lat], "Driver start");
-      addMarker("#7c3aed", [driverEnd.lng, driverEnd.lat], "Driver end");
+      const boundsPts = [
+        { lat: driverStart.lat, lng: driverStart.lng },
+        { lat: driverEnd.lat, lng: driverEnd.lng },
+      ];
+      overlaysRef.current.push(dotMarker(map, "#2563eb", boundsPts[0], "Driver start"));
+      overlaysRef.current.push(dotMarker(map, "#7c3aed", boundsPts[1], "Driver end"));
 
       const pickups = [];
       const drops = [];
@@ -64,52 +82,42 @@ export default function DriverRoute({ ride }) {
         const name = rider.name && rider.name !== "undefined" ? rider.name : "Rider";
         if (pickup?.lng) {
           pickups.push([pickup.lng, pickup.lat]);
-          bounds.extend([pickup.lng, pickup.lat]);
-          addMarker("#16a34a", [pickup.lng, pickup.lat], `Pickup ${i + 1} · ${name}`);
+          boundsPts.push({ lat: pickup.lat, lng: pickup.lng });
+          overlaysRef.current.push(dotMarker(map, "#16a34a", { lat: pickup.lat, lng: pickup.lng }, `Pickup ${i + 1} · ${name}`));
         }
         if (drop?.lng) {
           drops.push([drop.lng, drop.lat]);
-          bounds.extend([drop.lng, drop.lat]);
-          addMarker("#dc2626", [drop.lng, drop.lat], `Drop ${i + 1} · ${name}`);
+          boundsPts.push({ lat: drop.lat, lng: drop.lng });
+          overlaysRef.current.push(dotMarker(map, "#dc2626", { lat: drop.lat, lng: drop.lng }, `Drop ${i + 1} · ${name}`));
         }
         if (pickup?.lng && drop?.lng) {
-          routeGeometry([[pickup.lng, pickup.lat], [drop.lng, drop.lat]]).then((geom) => {
-            if (!geom || !map.getCanvas()) return;
-            const id = `route-rider-${i}`;
-            map.addSource(id, { type: "geojson", data: { type: "Feature", geometry: geom } });
-            map.addLayer({
-              id,
-              type: "line",
-              source: id,
-              paint: { "line-color": colorFor(i), "line-width": 3, "line-dasharray": [2, 2], "line-opacity": 0.7 },
-            });
+          routeCoords([[pickup.lng, pickup.lat], [drop.lng, drop.lat]]).then((coordsArr) => {
+            if (!coordsArr || cancelled) return;
+            overlaysRef.current.push(
+              drawRoutePolyline(map, coordsArr, { color: colorFor(i), width: 3, opacity: 0.7 })
+            );
           });
         }
       });
 
-      const main = [[driverStart.lng, driverStart.lat], ...pickups, ...drops, [driverEnd.lng, driverEnd.lat]];
-      const geom = await routeGeometry(main);
-      if (map.getCanvas()) {
-        const data = geom
-          ? { type: "Feature", geometry: geom }
-          : { type: "Feature", geometry: { type: "LineString", coordinates: main } };
-        map.addSource("route-driver", { type: "geojson", data });
-        map.addLayer({
-          id: "route-driver",
-          type: "line",
-          source: "route-driver",
-          paint: { "line-color": "#0f9b7f", "line-width": 6, "line-opacity": 0.85 },
-        });
-        if (geom?.coordinates) geom.coordinates.forEach((c) => bounds.extend(c));
-      }
-      if (!bounds.isEmpty()) map.fitBounds(bounds, { padding: 60, maxZoom: 15 });
-    };
+      const main = [
+        [driverStart.lng, driverStart.lat],
+        ...pickups,
+        ...drops,
+        [driverEnd.lng, driverEnd.lat],
+      ];
+      const coordsArr = await routeCoords(main);
+      if (cancelled) return;
+      const line = coordsArr || main;
+      overlaysRef.current.push(drawRoutePolyline(map, line, { color: "#0f9b7f", width: 6, opacity: 0.85 }));
+      line.forEach(([lng, lat]) => boundsPts.push({ lat, lng }));
 
-    map.on("load", draw);
+      if (boundsPts.length) map.fitBounds(boundsFrom(boundsPts), 60);
+    })();
+
     return () => {
-      markersRef.current.forEach((m) => m.remove());
-      markersRef.current = [];
-      map.remove();
+      cancelled = true;
+      clearOverlays();
     };
   }, [ride]);
 

@@ -7,3 +7,4 @@
 # Dependencies / build (see frontend/.gitignore for the app)
 node_modules
 dist
+.firecrawl/

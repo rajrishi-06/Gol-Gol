@@ -1,58 +1,60 @@
 import { useEffect, useRef } from "react";
-import "mapbox-gl/dist/mapbox-gl.css";
-import { mapboxgl, MAP_STYLE, createImageMarker } from "../lib/mapbox";
+import {
+  loadGoogleMaps,
+  createMap,
+  createImageMarker,
+  drawRoutePolyline,
+  boundsFrom,
+  toPath,
+  minZoomForRadius,
+  restrictionAround,
+} from "../lib/googlemaps";
 import { fetchRoute } from "../lib/geocoding";
 
 /** Route preview map for the booking screen. */
 export default function BookRight({ fromCords, toCords }) {
   const mapContainer = useRef(null);
-  const map = useRef(null);
+  const mapRef = useRef(null);
+  const routeRef = useRef(null);
 
   useEffect(() => {
-    if (map.current || !fromCords) return;
+    if (!fromCords) return;
+    let cancelled = false;
 
-    map.current = new mapboxgl.Map({
-      container: mapContainer.current,
-      style: MAP_STYLE.streets,
-      center: [fromCords.lng, fromCords.lat],
-      zoom: 12,
-      attributionControl: false,
-    });
+    (async () => {
+      await loadGoogleMaps();
+      if (cancelled || !mapContainer.current) return;
 
-    map.current.on("load", async () => {
-      if (!fromCords || !toCords) return;
-      createImageMarker({ iconPath: "/icons/pickup.svg", coords: [fromCords.lng, fromCords.lat], map: map.current, size: 48 });
-      createImageMarker({ iconPath: "/icons/destination.svg", coords: [toCords.lng, toCords.lat], map: map.current, size: 48 });
+      if (!mapRef.current) {
+        mapRef.current = createMap(mapContainer.current, {
+          center: { lat: fromCords.lat, lng: fromCords.lng },
+          zoom: 12,
+          restriction: restrictionAround(fromCords.lat, fromCords.lng, 100),
+          minZoom: minZoomForRadius(fromCords.lat, 100),
+        });
+      }
+      const map = mapRef.current;
+
+      createImageMarker({ iconPath: "/icons/pickup.svg", position: { lat: fromCords.lat, lng: fromCords.lng }, map, size: 48, title: "Pickup" });
+      if (!toCords) return;
+      createImageMarker({ iconPath: "/icons/destination.svg", position: { lat: toCords.lat, lng: toCords.lng }, map, size: 48, title: "Drop" });
 
       try {
         const route = await fetchRoute([
           [fromCords.lng, fromCords.lat],
           [toCords.lng, toCords.lat],
         ]);
-        if (!route) return;
-        const geojson = { type: "Feature", properties: {}, geometry: route.geometry };
-        if (map.current.getSource("route")) {
-          map.current.getSource("route").setData(geojson);
-        } else {
-          map.current.addLayer({
-            id: "route",
-            type: "line",
-            source: { type: "geojson", data: geojson },
-            layout: { "line-join": "round", "line-cap": "round" },
-            paint: { "line-color": "#0f9b7f", "line-width": 5, "line-opacity": 0.85 },
-          });
-        }
-        const bounds = new mapboxgl.LngLatBounds();
-        route.geometry.coordinates.forEach((c) => bounds.extend(c));
-        map.current.fitBounds(bounds, { padding: 64 });
+        if (!route?.geometry || cancelled) return;
+        routeRef.current?.setMap(null);
+        routeRef.current = drawRoutePolyline(map, route.geometry.coordinates, { width: 5, animate: true });
+        map.fitBounds(boundsFrom(toPath(route.geometry.coordinates)), 64);
       } catch {
         /* route preview is non-critical */
       }
-    });
+    })();
 
     return () => {
-      map.current?.remove();
-      map.current = null;
+      cancelled = true;
     };
   }, [fromCords, toCords]);
 

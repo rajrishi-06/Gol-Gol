@@ -40,7 +40,8 @@ export default function Login({ setLogIn }) {
     setError("");
     setLoading(true);
     try {
-      const { data: existing } = await supabase.from("users").select("id").eq("mobile", phone).single();
+      // maybeSingle → no 406 when the number isn't registered yet.
+      const { data: existing } = await supabase.from("users").select("id").eq("mobile", phone).maybeSingle();
       if (existing) {
         setIsNewUser(false);
         await sendOtp();
@@ -49,13 +50,8 @@ export default function Login({ setLogIn }) {
         setIsNewUser(true);
         setStep(2);
       }
-    } catch (err) {
-      if (err.code === "PGRST116") {
-        setIsNewUser(true);
-        setStep(2);
-      } else {
-        setError("Something went wrong. Please try again.");
-      }
+    } catch {
+      setError("Something went wrong. Please try again.");
     } finally {
       setLoading(false);
     }

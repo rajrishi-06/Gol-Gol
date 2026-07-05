@@ -4,6 +4,7 @@ import { Menu, X, Car, Navigation, LifeBuoy, FileText, Sparkles } from "lucide-r
 import Button from "./ui/Button";
 import Logo from "./ui/Logo";
 import ThemeToggle from "./ui/ThemeToggle";
+import NotificationBell from "./NotificationBell";
 import { cn } from "../lib/cn";
 
 const NAV_LINKS = [
@@ -58,6 +59,7 @@ export default function Navbar({ logIn }) {
 
         <div className="flex items-center gap-1.5">
           <ThemeToggle />
+          {logIn && <NotificationBell />}
           <Button
             variant={logIn ? "secondary" : "primary"}
             size="sm"

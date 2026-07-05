@@ -1,10 +1,7 @@
 import React, { useRef, useEffect, useState } from "react";
-import mapboxgl from "mapbox-gl";
 import { Crosshair, ArrowLeft, Check, Search, MapPin } from "lucide-react";
-import "mapbox-gl/dist/mapbox-gl.css";
-import { MAP_STYLE } from "../lib/mapbox";
-import { computeBounds } from "../lib/geo";
-import { reverseGeocode, forwardGeocode } from "../lib/geocoding";
+import { loadGoogleMaps, createMap, restrictionAround, attachCenterZoom, minZoomForRadius } from "../lib/googlemaps";
+import { reverseGeocode, forwardGeocode, resolvePlace } from "../lib/geocoding";
 
 interface MapPickerProps {
   setLoc: (value: string) => void;
@@ -14,15 +11,33 @@ interface MapPickerProps {
   mode: "from" | "to";
 }
 
+interface Suggestion {
+  id: string;
+  text: string;
+  secondary: string;
+  place_name: string;
+  center: [number, number] | null;
+}
+
 const MapPicker: React.FC<MapPickerProps> = ({ setLoc, setClickedLoc, setCords, initialCenter, mode }) => {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
-  const mapRef = useRef<mapboxgl.Map | null>(null);
+  const mapRef = useRef<any>(null);
+  const zoomCleanupRef = useRef<(() => void) | null>(null);
+  const didUserTypeRef = useRef(false);
+
+  // Keep zoom-out within ~100 km of the picked location.
+  const MAX_RADIUS_KM = 100;
 
   const [coords, setCoords] = useState({ lat: 0, lng: 0 });
   const [searchInput, setSearchInput] = useState("");
-  const [suggestions, setSuggestions] = useState<any[]>([]);
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [didUserType, setDidUserType] = useState(false);
   const [ready, setReady] = useState(false);
+
+  // Keep a ref in sync so map event listeners (bound once) read the latest value.
+  useEffect(() => {
+    didUserTypeRef.current = didUserType;
+  }, [didUserType]);
 
   // Initialize map, preferring `initialCenter` over geolocation.
   useEffect(() => {
@@ -56,39 +71,34 @@ const MapPicker: React.FC<MapPickerProps> = ({ setLoc, setClickedLoc, setCords, 
       if (cancelled) return;
       setCoords({ lat, lng });
 
-      const { sw, ne } = computeBounds(lat, lng);
-      const map = new mapboxgl.Map({
-        container: mapContainerRef.current!,
-        style: MAP_STYLE.streets,
-        center: [lng, lat],
-        zoom: 13,
-        maxBounds: [sw, ne] as any,
-        attributionControl: false,
-        // Zoom around the centre pin (not the cursor) so the selected point
-        // stays fixed while the user zooms.
-        scrollZoom: { around: "center" },
-        touchZoomRotate: { around: "center" },
-        doubleClickZoom: false,
-        dragRotate: false,
+      await loadGoogleMaps();
+      if (cancelled || !mapContainerRef.current) return;
+
+      const minZoom = minZoomForRadius(lat, MAX_RADIUS_KM);
+      const map = createMap(mapContainerRef.current, {
+        center: { lat, lng },
+        zoom: 15,
+        restriction: restrictionAround(lat, lng, MAX_RADIUS_KM),
+        strictBounds: true,
+        minZoom,
       });
       mapRef.current = map;
-      // The centre coordinate is valid immediately, so enable Confirm now
-      // rather than waiting on `load` (which never fires if tiles fail).
+      // Zoom in/out around the fixed centre pin, not the cursor.
+      zoomCleanupRef.current = attachCenterZoom(map, mapContainerRef.current, { minZoom });
+      // The centre coordinate is valid immediately, so enable Confirm now.
       setReady(true);
-      map.addControl(new mapboxgl.GeolocateControl({ positionOptions: { enableHighAccuracy: true }, trackUserLocation: true }), "bottom-right");
 
-      map.getCanvas().style.cursor = "grab";
-      map.on("mousedown", () => (map.getCanvas().style.cursor = "grabbing"));
-      map.on("mouseup", () => (map.getCanvas().style.cursor = "grab"));
-      map.on("move", () => {
+      // The pin is fixed at screen centre, so the map centre is the selection.
+      map.addListener("center_changed", () => {
         const c = map.getCenter();
-        setCoords({ lat: c.lat, lng: c.lng });
+        if (c) setCoords({ lat: c.lat(), lng: c.lng() });
       });
-      map.on("idle", async () => {
-        if (didUserType) return;
-        const { lat: cLat, lng: cLng } = map.getCenter();
+      map.addListener("idle", async () => {
+        if (didUserTypeRef.current) return;
+        const c = map.getCenter();
+        if (!c) return;
         try {
-          const place = await reverseGeocode(cLng, cLat);
+          const place = await reverseGeocode(c.lng(), c.lat());
           if (place && !cancelled) setSearchInput(place);
         } catch {
           /* ignore reverse-geocode failures */
@@ -99,12 +109,14 @@ const MapPicker: React.FC<MapPickerProps> = ({ setLoc, setClickedLoc, setCords, 
     init();
     return () => {
       cancelled = true;
-      mapRef.current?.remove();
+      zoomCleanupRef.current?.();
+      zoomCleanupRef.current = null;
+      mapRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialCenter]);
 
-  // Debounced forward-geocode as the user types.
+  // Debounced autocomplete as the user types.
   useEffect(() => {
     if (!didUserType || !mapRef.current) return;
     const trimmed = searchInput.trim();
@@ -114,7 +126,6 @@ const MapPicker: React.FC<MapPickerProps> = ({ setLoc, setClickedLoc, setCords, 
     }
     const t = setTimeout(async () => {
       try {
-        // Bias results to what the user is currently looking at.
         setSuggestions(await forwardGeocode(trimmed, { proximity: coords }));
       } catch {
         setSuggestions([]);
@@ -124,18 +135,32 @@ const MapPicker: React.FC<MapPickerProps> = ({ setLoc, setClickedLoc, setCords, 
   }, [searchInput, didUserType, coords]);
 
   const flyTo = (lat: number, lng: number) => {
-    const { sw, ne } = computeBounds(lat, lng);
-    mapRef.current!.setMaxBounds([sw, ne] as any);
-    mapRef.current!.flyTo({ center: [lng, lat], zoom: 14, essential: true });
+    const map = mapRef.current;
+    if (!map) return;
+    // Re-centre the 100 km limit on the newly picked location.
+    map.setOptions({
+      restriction: { latLngBounds: restrictionAround(lat, lng, MAX_RADIUS_KM), strictBounds: true },
+      minZoom: minZoomForRadius(lat, MAX_RADIUS_KM),
+    });
+    map.panTo({ lat, lng });
+    map.setZoom(16);
     setCoords({ lat, lng });
   };
 
-  const handleSuggestionClick = (place: any) => {
-    const [lng, lat] = place.center;
-    setSearchInput(place.place_name);
-    flyTo(lat, lng);
+  const handleSuggestionClick = async (place: Suggestion) => {
+    setSearchInput(place.place_name || place.text);
     setSuggestions([]);
     setDidUserType(false);
+    let center = place.center;
+    if (!center) {
+      try {
+        const resolved = await resolvePlace(place.id);
+        center = resolved?.center ?? null;
+      } catch {
+        center = null;
+      }
+    }
+    if (center) flyTo(center[1], center[0]);
   };
 
   const handleSearch = async () => {
@@ -217,26 +242,20 @@ const MapPicker: React.FC<MapPickerProps> = ({ setLoc, setClickedLoc, setCords, 
 
         {suggestions.length > 0 && (
           <ul className="mx-auto mt-2 max-w-xl overflow-hidden rounded-2xl border border-border bg-surface shadow-floating">
-            {suggestions.map((s, i) => {
-              // Split the main place name from its administrative context.
-              const context = s.place_name?.startsWith(s.text)
-                ? s.place_name.slice(s.text.length).replace(/^,\s*/, "")
-                : s.place_name;
-              return (
-                <li key={s.id || i}>
-                  <button
-                    onClick={() => handleSuggestionClick(s)}
-                    className="flex w-full items-start gap-2.5 px-4 py-2.5 text-left transition-colors hover:bg-surface-2 focus-visible:bg-surface-2 focus-visible:outline-none"
-                  >
-                    <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                    <span className="min-w-0">
-                      <span className="block truncate text-sm font-medium text-foreground">{s.text}</span>
-                      {context && <span className="block truncate text-xs text-muted">{context}</span>}
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
+            {suggestions.map((s, i) => (
+              <li key={s.id || i}>
+                <button
+                  onClick={() => handleSuggestionClick(s)}
+                  className="flex w-full items-start gap-2.5 px-4 py-2.5 text-left transition-colors hover:bg-surface-2 focus-visible:bg-surface-2 focus-visible:outline-none"
+                >
+                  <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-medium text-foreground">{s.text}</span>
+                    {s.secondary && <span className="block truncate text-xs text-muted">{s.secondary}</span>}
+                  </span>
+                </button>
+              </li>
+            ))}
           </ul>
         )}
       </div>

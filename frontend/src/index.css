@@ -31,9 +31,10 @@
   --radius-2xl: 1.125rem;
   --radius-3xl: 1.5rem;
 
-  /* Motion */
+  /* Motion — exponential ease-out (smooth deceleration, no bounce). */
   --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
-  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
 
   /* Keyframes */
   --animate-fade-in: fade-in 0.5s var(--ease-out-quart) both;
@@ -267,6 +268,21 @@
   .animate-scale-in { animation: var(--animate-scale-in); }
   .animate-slide-in-right { animation: var(--animate-slide-in-right); }
   .animate-float { animation: var(--animate-float); }
+
+  /* Staggered list entrance. Put style={{ "--i": index }} on each sibling; the
+     delay is capped implicitly by keeping lists short (≤ ~8 items). */
+  .animate-rise {
+    animation: fade-up 0.5s var(--ease-out-quint) both;
+    animation-delay: calc(var(--i, 0) * 45ms);
+  }
+
+  /* Idle-hero globe motion. */
+  .anim-globe-spin { animation: globe-spin 6s linear infinite; }
+  .anim-spin-slow { animation: spin 30s linear infinite; }
+  .anim-spin-rev { animation: spin 46s linear infinite reverse; }
+  .anim-ping-soft { animation: ping-soft 3.6s var(--ease-out-quart) infinite; }
+  .anim-orbit { animation: orbit-travel var(--orbit-dur, 18s) linear infinite; }
+  .anim-twinkle { animation: twinkle 3s ease-in-out infinite; }
 }
 
 @keyframes fade-in {
@@ -293,16 +309,14 @@
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-10px); }
 }
-
-/* Mapbox popups inherit the theme instead of default white. */
-.mapboxgl-popup-content {
-  background: var(--surface);
-  color: var(--foreground);
-  border-radius: 0.75rem;
-  box-shadow: 0 8px 30px -8px hsl(var(--shadow-color) / 0.35);
-  font-family: var(--font-sans);
-  font-size: 0.8125rem;
-  padding: 0.625rem 0.875rem;
+@keyframes globe-spin { to { transform: translateX(-48px); } }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes orbit-travel { to { offset-distance: 100%; } }
+@keyframes ping-soft {
+  0% { transform: scale(0.5); opacity: 0.5; }
+  70%, 100% { transform: scale(2.3); opacity: 0; }
 }
-.mapboxgl-popup-close-button { color: var(--muted); font-size: 1.1rem; }
-.mapboxgl-popup-tip { border-top-color: var(--surface) !important; border-bottom-color: var(--surface) !important; }
+@keyframes twinkle {
+  0%, 100% { opacity: 0.2; }
+  50% { opacity: 0.9; }
+}

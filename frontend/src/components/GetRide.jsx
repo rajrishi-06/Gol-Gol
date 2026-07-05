@@ -1,30 +1,39 @@
 import { lazy, Suspense, useState } from "react";
 import { ArrowLeft } from "lucide-react";
 import LeftPanel from "./LeftPanel";
-import RightPanel from "./RightPanel";
+import HomeMap from "./HomeMap";
+import IdleGlobe from "./IdleGlobe";
 import PageLoader from "./PageLoader";
 
-// Defer the Mapbox GL bundle (~1.8 MB) until the user actually opens the
-// picker or previews a route — the landing view loads without it.
+// Defer the map bundle until the user actually opens the picker or previews a
+// route — the landing view loads without it.
 const MapPicker = lazy(() => import("./MapPicker"));
 const DriverRoute = lazy(() => import("./DriverRoute"));
 
 export default function Getride(props) {
-  const [clickedLocFrom, setClickedLocFrom] = useState(false);
-  const [clickedLocTo, setClickedLocTo] = useState(false);
+  // Single source of truth: `mode` says which endpoint we're editing, `picking`
+  // says whether the picker is open. (Previously two booleans + `mode` could
+  // disagree — switching pickup/drop wrote to the wrong coordinate and left the
+  // picker stuck open.)
+  const [picking, setPicking] = useState(false);
   const [mode, setMode] = useState("from");
   const [selectedRide, setSelectedRide] = useState(null);
 
-  const isPicking = clickedLocFrom || clickedLocTo;
-  const initialCenter = mode === "from" ? props.fromCords : props.toCords;
+  const isFrom = mode === "from";
+  const initialCenter = isFrom ? props.fromCords : props.toCords;
+
+  const openPicker = (nextMode) => {
+    setMode(nextMode);
+    setPicking(true);
+  };
 
   return (
     <div className="flex h-[100dvh] flex-col overflow-hidden sm:flex-row">
       <LeftPanel
         logIn={props.logIn}
         setMode={setMode}
-        setClickedFrom={setClickedLocFrom}
-        setClickedTo={setClickedLocTo}
+        setClickedFrom={() => openPicker("from")}
+        setClickedTo={() => openPicker("to")}
         from={props.from}
         to={props.to}
         fromCords={props.fromCords}
@@ -32,16 +41,15 @@ export default function Getride(props) {
         setSelectedRide={setSelectedRide}
       />
 
-      {isPicking ? (
-        // Full-screen overlay on mobile (previously hidden → picking was
-        // impossible on phones); inline on tablet/desktop.
+      {picking ? (
+        // Full-screen overlay on mobile; inline on tablet/desktop.
         <Suspense fallback={<div className="fixed inset-0 z-50 sm:relative sm:flex-1"><PageLoader /></div>}>
           <MapPicker
             mode={mode}
             initialCenter={initialCenter}
-            setLoc={clickedLocFrom ? props.setFrom : props.setTo}
-            setCords={clickedLocFrom ? props.setFromCords : props.setToCords}
-            setClickedLoc={clickedLocFrom ? setClickedLocFrom : setClickedLocTo}
+            setLoc={isFrom ? props.setFrom : props.setTo}
+            setCords={isFrom ? props.setFromCords : props.setToCords}
+            setClickedLoc={setPicking}
           />
         </Suspense>
       ) : selectedRide ? (
@@ -56,8 +64,10 @@ export default function Getride(props) {
             <ArrowLeft className="h-4 w-4" /> Back
           </button>
         </div>
+      ) : props.fromCords?.lat ? (
+        <HomeMap fromCords={props.fromCords} toCords={props.toCords} />
       ) : (
-        <RightPanel />
+        <IdleGlobe />
       )}
     </div>
   );

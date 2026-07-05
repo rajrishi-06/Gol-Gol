@@ -85,7 +85,8 @@ export default function BookLeft() {
     }
     setIsBooking(true);
     setBookingMessage("Sending your ride request…");
-    const otp = Math.floor(1000 + Math.random() * 9000).toString();
+    // distance, fare and the start-OTP are computed server-side (triggers in
+    // migration 0003); we only send the trip inputs.
     const { data, error } = await supabase
       .from("rides")
       .insert({
@@ -97,10 +98,7 @@ export default function BookLeft() {
         to_lng: toCords.lng,
         from_address: fromAddress,
         to_address: toAddress,
-        distance_km: distance,
-        fare: fare.total,
         status: "pending",
-        start_otp: otp,
       })
       .select()
       .single();

@@ -1,155 +1,176 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { User, Car } from "lucide-react";
-import "mapbox-gl/dist/mapbox-gl.css";
+import { User, Car, ArrowLeft, LocateFixed } from "lucide-react";
+import { toast } from "sonner";
 import { supabase } from "../../lib/supabase";
-import { computeBounds } from "../../lib/geo";
-import { mapboxgl, MAP_STYLE, createImageMarker, createVehicleMarker } from "../../lib/mapbox";
+import { distanceKm } from "../../lib/geo";
+import {
+  loadGoogleMaps,
+  createMap,
+  createImageMarker,
+  createVehicleMarker,
+  drawRoutePolyline,
+  boundsFrom,
+  restrictionAround,
+  minZoomForRadius,
+} from "../../lib/googlemaps";
 import { fetchRoute } from "../../lib/geocoding";
+import { notifyUser } from "../../lib/notify";
+import { subscribeRideLocation } from "../../lib/liveLocation";
 import { formatCurrency } from "../../lib/format";
 import Chatbox from "../Chatbox";
 import Button from "../ui/Button";
 import Spinner from "../ui/Spinner";
+import RideSheet from "../RideSheet";
 
-/** Map for the "driver approaching" (accepted) state. */
-function RiderMapView({ ride, driverLocation, riderLocation, destinationLocation, status }) {
-  const mapContainerRef = useRef(null);
+/**
+ * Google-Maps-style live tracking for the rider. The driver marker moves in
+ * real time, a live route is drawn (driver → pickup while approaching, driver →
+ * destination during the trip), with an ETA, a recenter control and a
+ * back-to-home button. Route is re-fetched only after the driver moves a bit,
+ * so we don't hammer the Routes API on every GPS tick.
+ */
+function RiderTrackingMap({ ride, riderLocation, driverLocation, destination, status, onBack }) {
+  const containerRef = useRef(null);
   const mapRef = useRef(null);
   const driverMarkerRef = useRef(null);
   const pickupMarkerRef = useRef(null);
-  const dropoffMarkerRef = useRef(null);
+  const destMarkerRef = useRef(null);
+  const routeRef = useRef(null);
+  const lastRoutedRef = useRef(null);
+  const fittedRef = useRef(false);
+  const [mapReady, setMapReady] = useState(false);
+  const [eta, setEta] = useState(null);
 
+  const vehicleType = ride?.driver?.drivers?.vehicle_type;
+  // Where the driver is currently heading.
+  const target = status === "ongoing" ? destination : riderLocation;
+
+  const recenter = useCallback(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const pts = [];
+    if (driverLocation) pts.push(driverLocation);
+    if (target) pts.push(target);
+    if (pts.length >= 2) map.fitBounds(boundsFrom(pts), 90);
+    else if (pts.length === 1) {
+      map.panTo(pts[0]);
+      map.setZoom(15);
+    }
+  }, [driverLocation, target]);
+
+  // Create the map once (centred on the rider, which is always known).
   useEffect(() => {
-    if (!riderLocation || mapRef.current) return;
-    const { sw, ne } = computeBounds(riderLocation.lat, riderLocation.lng);
-    mapRef.current = new mapboxgl.Map({
-      container: mapContainerRef.current,
-      style: MAP_STYLE.streets,
-      center: [riderLocation.lng, riderLocation.lat],
-      zoom: 13,
-      maxBounds: [sw, ne],
-      attributionControl: false,
-    });
-  }, [riderLocation]);
+    let cancelled = false;
+    (async () => {
+      await loadGoogleMaps();
+      if (cancelled || !containerRef.current || mapRef.current) return;
+      const c = riderLocation;
+      mapRef.current = createMap(containerRef.current, {
+        center: { lat: c.lat, lng: c.lng },
+        zoom: 14,
+        restriction: restrictionAround(c.lat, c.lng, 100),
+        minZoom: minZoomForRadius(c.lat, 100),
+      });
+      setMapReady(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
+  // Markers — re-runs once the map is ready and whenever locations change,
+  // which also fixes the driver marker never appearing if the position
+  // arrived before the (async) map finished loading.
   useEffect(() => {
-    if (!mapRef.current) return;
-    const bounds = new mapboxgl.LngLatBounds();
+    const map = mapRef.current;
+    if (!mapReady || !map) return;
 
-    if (riderLocation && status === "accepted") {
-      const riderCoords = [riderLocation.lng, riderLocation.lat];
+    if (riderLocation && status !== "ongoing") {
       if (!pickupMarkerRef.current)
-        pickupMarkerRef.current = createImageMarker({ iconPath: "/icons/human.svg", coords: riderCoords, map: mapRef.current, popupText: "Pickup" });
-      bounds.extend(riderCoords);
+        pickupMarkerRef.current = createImageMarker({ iconPath: "/icons/human.svg", position: riderLocation, map, title: "Pickup" });
     } else if (pickupMarkerRef.current) {
-      pickupMarkerRef.current.remove();
+      pickupMarkerRef.current.setMap(null);
       pickupMarkerRef.current = null;
     }
 
-    if (driverLocation) {
-      const driverCoords = [driverLocation.lng, driverLocation.lat];
+    if (destination && status === "ongoing" && !destMarkerRef.current) {
+      destMarkerRef.current = createImageMarker({ iconPath: "/icons/destination.svg", position: destination, map, title: "Destination" });
+    }
+
+    if (driverLocation && vehicleType) {
       if (!driverMarkerRef.current)
-        driverMarkerRef.current = createVehicleMarker({ vehicleType: ride.driver.drivers.vehicle_type, coords: driverCoords, map: mapRef.current, popupText: "Your driver" });
-      else driverMarkerRef.current.setLngLat(driverCoords);
-      bounds.extend(driverCoords);
+        driverMarkerRef.current = createVehicleMarker({ vehicleType, position: driverLocation, map, title: "Your driver" });
+      else driverMarkerRef.current.setPosition(driverLocation);
     }
+  }, [mapReady, driverLocation, riderLocation, destination, status, vehicleType]);
 
-    if (destinationLocation && status === "ongoing") {
-      const destCoords = [destinationLocation.lng, destinationLocation.lat];
-      if (!dropoffMarkerRef.current)
-        dropoffMarkerRef.current = createImageMarker({ iconPath: "/icons/destination.svg", coords: destCoords, map: mapRef.current, popupText: "Destination" });
-      bounds.extend(destCoords);
-    }
-
-    if (bounds.getNorthEast() && bounds.getSouthWest())
-      mapRef.current.fitBounds(bounds, { padding: 60, maxZoom: 15, duration: 1000 });
-  }, [driverLocation, riderLocation, destinationLocation, status, ride]);
-
-  return <div ref={mapContainerRef} className="h-full w-full" />;
-}
-
-/** Route-overview map for the ongoing state. */
-function RiderNavigationView({ ride, riderLocation, driverLocation, destination }) {
-  const mapContainerRef = useRef(null);
-  const mapRef = useRef(null);
-  const driverMarkerRef = useRef(null);
-  const destinationMarkerRef = useRef(null);
-  const [eta, setEta] = useState(null);
-  const [routeInfo, setRouteInfo] = useState(null);
-
-  const drawRoute = useCallback(async () => {
-    if (!riderLocation || !destination || !mapRef.current) return;
-    try {
-      const route = await fetchRoute([
-        [riderLocation.lng, riderLocation.lat],
-        [destination.lng, destination.lat],
-      ], { steps: true });
-      if (!route) return;
-      setEta({ duration: Math.round(route.duration / 60), distance: (route.distance / 1000).toFixed(2) });
-      setRouteInfo({ instructions: route.legs[0].steps.slice(0, 3) });
-      const geo = { type: "Feature", geometry: route.geometry };
-      if (mapRef.current.getSource("rider-route")) mapRef.current.getSource("rider-route").setData(geo);
-      else {
-        mapRef.current.addSource("rider-route", { type: "geojson", data: geo });
-        mapRef.current.addLayer({ id: "rider-route", type: "line", source: "rider-route", layout: { "line-join": "round", "line-cap": "round" }, paint: { "line-color": "#0f9b7f", "line-width": 4, "line-opacity": 0.8 } });
+  // Live route + ETA, re-fetched when the driver moves > ~150 m.
+  useEffect(() => {
+    if (!mapReady || !mapRef.current || !driverLocation || !target) return;
+    const last = lastRoutedRef.current;
+    if (last && distanceKm(last, driverLocation) < 0.15) return;
+    lastRoutedRef.current = driverLocation;
+    let cancelled = false;
+    (async () => {
+      try {
+        const route = await fetchRoute([
+          [driverLocation.lng, driverLocation.lat],
+          [target.lng, target.lat],
+        ]);
+        if (cancelled || !route) return;
+        setEta({ min: Math.max(1, Math.round(route.duration / 60)), km: (route.distance / 1000).toFixed(1) });
+        if (route.geometry) {
+          routeRef.current?.setMap(null);
+          routeRef.current = drawRoutePolyline(mapRef.current, route.geometry.coordinates, { width: 5 });
+        }
+      } catch {
+        /* route is non-critical */
       }
-    } catch {
-      /* ignore */
-    }
-  }, [riderLocation, destination]);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [mapReady, driverLocation, target]);
 
+  // Fit both driver + target into view the first time we have both.
   useEffect(() => {
-    if (!riderLocation) return;
-    if (!mapRef.current) {
-      const { sw, ne } = computeBounds(riderLocation.lat, riderLocation.lng);
-      mapRef.current = new mapboxgl.Map({
-        container: mapContainerRef.current,
-        style: MAP_STYLE.streets,
-        center: [riderLocation.lng, riderLocation.lat],
-        zoom: 13,
-        maxBounds: [sw, ne],
-        attributionControl: false,
-      });
-      mapRef.current.addControl(new mapboxgl.NavigationControl(), "bottom-left");
-      if (destination)
-        destinationMarkerRef.current = createImageMarker({ iconPath: "/icons/destination.svg", coords: [destination.lng, destination.lat], map: mapRef.current, popupText: "Destination" });
-      mapRef.current.on("load", drawRoute);
-    }
-    drawRoute();
-  }, [riderLocation, destination, drawRoute]);
-
-  useEffect(() => {
-    if (!mapRef.current || !driverLocation) return;
-    const driverCoords = [driverLocation.lng, driverLocation.lat];
-    if (!driverMarkerRef.current && ride?.driver?.drivers?.vehicle_type)
-      driverMarkerRef.current = createVehicleMarker({ vehicleType: ride.driver.drivers.vehicle_type, coords: driverCoords, map: mapRef.current, popupText: "Your driver" });
-    else if (driverMarkerRef.current) driverMarkerRef.current.setLngLat(driverCoords);
-
-    const bounds = new mapboxgl.LngLatBounds();
-    bounds.extend([riderLocation.lng, riderLocation.lat]);
-    bounds.extend(driverCoords);
-    if (destination) bounds.extend([destination.lng, destination.lat]);
-    mapRef.current.fitBounds(bounds, { padding: 60, maxZoom: 15, duration: 1000 });
-  }, [driverLocation, riderLocation, destination, ride]);
+    if (!mapReady || fittedRef.current || !driverLocation || !target) return;
+    fittedRef.current = true;
+    recenter();
+  }, [mapReady, driverLocation, target, recenter]);
 
   return (
     <div className="relative h-full w-full">
-      <div ref={mapContainerRef} className="h-full w-full" />
-      <div className="glass absolute right-4 top-4 max-w-xs rounded-2xl border border-border p-4 shadow-floating">
-        <h3 className="text-sm font-semibold text-primary">Your journey</h3>
-        <p className="mt-0.5 text-sm text-muted">
-          {eta ? `${eta.duration} min · ${eta.distance} km to destination` : "Calculating route…"}
+      <div ref={containerRef} className="h-full w-full" />
+
+      {onBack && (
+        <button
+          onClick={onBack}
+          aria-label="Back to home"
+          className="glass absolute left-4 top-4 grid h-11 w-11 place-items-center rounded-full border border-border text-foreground shadow-floating transition-colors hover:bg-surface-2 focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <ArrowLeft className="h-5 w-5" />
+        </button>
+      )}
+
+      <div className="glass absolute right-4 top-4 rounded-2xl border border-border px-4 py-2.5 shadow-floating">
+        <p className="text-xs font-medium text-primary">
+          {status === "ongoing" ? "To destination" : "Driver on the way"}
         </p>
-        {routeInfo?.instructions && (
-          <div className="mt-3 space-y-1.5">
-            {routeInfo.instructions.map((step, i) => (
-              <p key={i} className="rounded-lg bg-surface-2 px-2.5 py-1.5 text-xs text-muted">
-                {step.maneuver.instruction}
-              </p>
-            ))}
-          </div>
-        )}
+        <p className="text-sm font-semibold text-foreground">
+          {driverLocation ? (eta ? `${eta.min} min · ${eta.km} km` : "Calculating…") : "Locating driver…"}
+        </p>
       </div>
+
+      <button
+        onClick={recenter}
+        aria-label="Recenter map"
+        className="glass absolute bottom-[calc(40dvh+1rem)] right-4 grid h-11 w-11 place-items-center rounded-full border border-border text-foreground shadow-floating transition-colors hover:bg-surface-2 focus-visible:ring-2 focus-visible:ring-ring sm:bottom-4"
+      >
+        <LocateFixed className="h-5 w-5" />
+      </button>
     </div>
   );
 }
@@ -162,6 +183,7 @@ export default function RiderActiveRide() {
   const [messages, setMessages] = useState([]);
   const [userId, setUserId] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [startOtp, setStartOtp] = useState(null);
 
   useEffect(() => {
     (async () => {
@@ -213,23 +235,61 @@ export default function RiderActiveRide() {
     };
   }, [rideId, navigate]);
 
+  // Live driver location. The last-known position comes from the DB (so the
+  // driver appears instantly on open); live movement streams over Realtime
+  // Broadcast keyed by the ride id (matches the driver's publisher).
   useEffect(() => {
     if (!ride?.driver_id) return;
     (async () => {
-      const { data } = await supabase.from("active_drivers").select("current_lat, current_lng").eq("user_id", ride.driver_id).single();
-      if (data) setDriverLocation({ lat: data.current_lat, lng: data.current_lng });
+      const { data } = await supabase
+        .from("active_drivers")
+        .select("current_lat, current_lng")
+        .eq("user_id", ride.driver_id)
+        .maybeSingle();
+      if (data?.current_lat != null) setDriverLocation({ lat: data.current_lat, lng: data.current_lng });
     })();
-    const channel = supabase
-      .channel(`driver-location:${ride.driver_id}`)
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "active_drivers", filter: `user_id=eq.${ride.driver_id}` }, (payload) => setDriverLocation({ lat: payload.new.current_lat, lng: payload.new.current_lng }))
-      .subscribe();
-    return () => supabase.removeChannel(channel);
-  }, [ride?.driver_id]);
+    const unsubscribe = subscribeRideLocation(rideId, setDriverLocation);
+    return unsubscribe;
+  }, [ride?.driver_id, rideId]);
 
-  const handleCancelRide = async () => {
-    if (window.confirm("Are you sure you want to cancel this ride?")) {
-      await supabase.from("rides").update({ status: "cancelled" }).eq("id", rideId);
-    }
+  // The start-OTP lives in a rider-only table (migration 0003); fetch it to show.
+  useEffect(() => {
+    if (ride?.status !== "accepted") return;
+    let active = true;
+    (async () => {
+      const { data } = await supabase.from("ride_otps").select("otp").eq("ride_id", rideId).maybeSingle();
+      if (active && data?.otp) setStartOtp(data.otp);
+    })();
+    return () => {
+      active = false;
+    };
+  }, [ride?.status, rideId]);
+
+  const handleCancelRide = () => {
+    toast("Cancel this ride?", {
+      description: "This can't be undone. Your driver will be notified.",
+      action: {
+        label: "Cancel ride",
+        onClick: async () => {
+          const { error } = await supabase.from("rides").update({ status: "cancelled" }).eq("id", rideId);
+          if (error) {
+            toast.error("Couldn't cancel the ride. Please try again.");
+            return;
+          }
+          toast.success("Ride cancelled.");
+          if (ride?.driver_id) {
+            notifyUser({
+              userId: ride.driver_id,
+              title: "Ride cancelled",
+              body: "The rider cancelled this ride.",
+              url: "/driver/dashboard",
+              type: "ride_cancelled",
+            });
+          }
+        },
+      },
+      cancel: { label: "Keep ride" },
+    });
   };
 
   if (loading)
@@ -253,75 +313,71 @@ export default function RiderActiveRide() {
       </div>
     );
 
+  const heading = ride.status === "accepted" ? "Driver is on the way" : "You're on your way";
+  const mapEl = (
+    <RiderTrackingMap
+      ride={ride}
+      riderLocation={{ lat: ride.from_lat, lng: ride.from_lng }}
+      driverLocation={driverLocation}
+      destination={{ lat: ride.to_lat, lng: ride.to_lng }}
+      status={ride.status}
+      onBack={() => navigate("/")}
+    />
+  );
+
   return (
-    <div className="flex h-[100dvh] flex-col overflow-hidden sm:flex-row">
-      <div className="flex w-full flex-col overflow-y-auto bg-background px-6 py-6 sm:w-[500px] sm:shrink-0 sm:border-r sm:border-border lg:w-[540px]">
-        <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-          {ride.status === "accepted" ? "Driver is on the way" : "You're on your way"}
-        </h1>
+    <RideSheet title={heading} map={mapEl}>
+      <h1 className="text-2xl font-semibold tracking-tight text-foreground">{heading}</h1>
 
-        <div className="mt-5 flex items-center gap-3 rounded-2xl border border-border bg-surface p-4 shadow-soft">
-          <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-surface-2 text-muted">
-            <User className="h-6 w-6" />
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="truncate font-semibold text-foreground">{ride.driver.drivers.users.name}</p>
-            <p className="truncate text-sm text-muted">
-              {ride.driver.drivers.vehicle_type} · {ride.driver.drivers.vehicle_registration}
-            </p>
-          </div>
-          <div className="text-right">
-            <p className="text-lg font-bold text-foreground">{formatCurrency(ride.fare)}</p>
-            <p className="text-xs text-subtle">Total fare</p>
-          </div>
+      <div className="mt-5 flex items-center gap-3 rounded-2xl border border-border bg-surface p-4 shadow-soft">
+        <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-surface-2 text-muted">
+          <User className="h-6 w-6" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-semibold text-foreground">{ride.driver.drivers.users.name}</p>
+          <p className="truncate text-sm text-muted">
+            {ride.driver.drivers.vehicle_type} · {ride.driver.drivers.vehicle_registration}
+          </p>
         </div>
-
-        {ride.status === "accepted" && (
-          <div className="mt-4 rounded-2xl border border-border bg-surface p-4 text-center shadow-soft">
-            <h2 className="font-semibold text-foreground">Share this OTP</h2>
-            <p className="mt-1 text-sm text-muted">Give it to your driver to start the ride.</p>
-            <p className="mt-3 rounded-xl bg-primary-subtle py-3 text-3xl font-bold tracking-[0.3em] text-primary-subtle-fg">
-              {ride.start_otp}
-            </p>
-          </div>
-        )}
-
-        {ride.status === "ongoing" && (
-          <div className="mt-4 rounded-2xl border border-border bg-surface p-4 shadow-soft">
-            <h2 className="font-semibold text-foreground">Trip in progress</h2>
-            <p className="mt-1 text-sm text-muted">The map shows your live route and progress to the destination.</p>
-          </div>
-        )}
-
-        <div className="mt-4">
-          <Chatbox rideId={rideId} userId={userId} messages={messages} title="Chat with driver" />
+        <div className="text-right">
+          <p className="text-lg font-bold text-foreground">{formatCurrency(ride.fare)}</p>
+          <p className="text-xs text-subtle">Total fare</p>
         </div>
-
-        {ride.status !== "ongoing" && (
-          <Button variant="danger" fullWidth className="mt-4" onClick={handleCancelRide}>
-            Cancel ride
-          </Button>
-        )}
       </div>
 
-      <div className="relative hidden flex-1 sm:block">
-        {ride.status === "ongoing" && driverLocation ? (
-          <RiderNavigationView
-            ride={ride}
-            riderLocation={{ lat: ride.from_lat, lng: ride.from_lng }}
-            driverLocation={driverLocation}
-            destination={{ lat: ride.to_lat, lng: ride.to_lng }}
-          />
-        ) : (
-          <RiderMapView
-            ride={ride}
-            driverLocation={driverLocation}
-            riderLocation={{ lat: ride.from_lat, lng: ride.from_lng }}
-            destinationLocation={{ lat: ride.to_lat, lng: ride.to_lng }}
-            status={ride.status}
-          />
-        )}
+      {ride.status === "accepted" && (
+        <div className="mt-4 rounded-2xl border border-border bg-surface p-4 text-center shadow-soft">
+          <h2 className="font-semibold text-foreground">Share this OTP</h2>
+          <p className="mt-1 text-sm text-muted">Give it to your driver to start the ride.</p>
+          <p className="mt-3 rounded-xl bg-primary-subtle py-3 text-3xl font-bold tracking-[0.3em] text-primary-subtle-fg">
+            {startOtp || "····"}
+          </p>
+        </div>
+      )}
+
+      {ride.status === "ongoing" && (
+        <div className="mt-4 rounded-2xl border border-border bg-surface p-4 shadow-soft">
+          <h2 className="font-semibold text-foreground">Trip in progress</h2>
+          <p className="mt-1 text-sm text-muted">The map shows your live route and progress to the destination.</p>
+        </div>
+      )}
+
+      <div className="mt-4">
+        <Chatbox
+          rideId={rideId}
+          userId={userId}
+          messages={messages}
+          title="Chat with driver"
+          recipientId={ride.driver_id}
+          recipientUrl={`/driver/ride/${rideId}`}
+        />
       </div>
-    </div>
+
+      {ride.status !== "ongoing" && (
+        <Button variant="danger" fullWidth className="mt-4" onClick={handleCancelRide}>
+          Cancel ride
+        </Button>
+      )}
+    </RideSheet>
   );
 }

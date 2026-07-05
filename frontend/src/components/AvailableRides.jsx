@@ -96,13 +96,13 @@ export default function AvailableRides({ fromCords, toCords }) {
       </p>
 
       <ul className="space-y-2">
-        {RIDE_TYPES.map((ride) => {
+        {RIDE_TYPES.map((ride, i) => {
           const eta = etas[ride.id];
           return (
-            <li key={ride.id}>
+            <li key={ride.id} className="animate-rise" style={{ "--i": i }}>
               <button
                 onClick={() => handleSelect(ride)}
-                className="group flex w-full items-center gap-3.5 rounded-2xl border border-border bg-surface p-3 text-left shadow-soft transition-all duration-200 hover:-translate-y-0.5 hover:border-border-strong hover:shadow-elevated focus-visible:ring-2 focus-visible:ring-ring"
+                className="group flex w-full items-center gap-3.5 rounded-2xl border border-border bg-surface p-3 text-left shadow-soft transition-all duration-200 hover:-translate-y-0.5 hover:border-border-strong hover:shadow-elevated active:scale-[0.99] focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <span className="grid h-14 w-14 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-zinc-50 to-zinc-200 ring-1 ring-black/[0.06]">
                   <img
@@ -128,7 +128,7 @@ export default function AvailableRides({ fromCords, toCords }) {
                   {loading ? (
                     <Skeleton className="h-5 w-12" />
                   ) : eta != null ? (
-                    <span className="rounded-full bg-primary-subtle px-2 py-0.5 text-xs font-semibold text-primary-subtle-fg">
+                    <span className="animate-scale-in rounded-full bg-primary-subtle px-2 py-0.5 text-xs font-semibold text-primary-subtle-fg">
                       {formatDuration(eta)}
                     </span>
                   ) : (

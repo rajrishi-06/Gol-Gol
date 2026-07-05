@@ -4,6 +4,7 @@ import { supabase } from "./lib/supabase";
 import ProtectedRoute from "./components/ProtectedRoute";
 import ProtectedDriverRoute from "./components/Driver/ProtectedDriverRoute";
 import PageLoader from "./components/PageLoader";
+import NotificationsListener from "./components/NotificationsListener";
 
 // Route-level code splitting: heavy Mapbox + driver flows load on demand,
 // keeping the initial bundle (landing + login) small.
@@ -81,8 +82,10 @@ function App() {
   }, [navigate]);
 
   return (
-    <Suspense fallback={<PageLoader />}>
-      <Routes>
+    <>
+      <NotificationsListener />
+      <Suspense fallback={<PageLoader />}>
+        <Routes>
         <Route
           path="/"
           element={
@@ -147,8 +150,9 @@ function App() {
         <Route path="/book" element={<Book fromCords={fromCords} toCords={toCords} />} />
 
         <Route path="*" element={<NotFound />} />
-      </Routes>
-    </Suspense>
+        </Routes>
+      </Suspense>
+    </>
   );
 }
 
