@@ -27,7 +27,7 @@ Edit `frontend/.env.local`:
 VITE_SUPABASE_URL=https://xrgmxebfvpaonbcvrczd.supabase.co
 VITE_SUPABASE_KEY=<paste the new anon public key>
 # leave these as-is:
-VITE_GOOGLE_MAPS_API_KEY=AIzaSyBNtPx8V5Luz7GIF7Ngf0DEpiUbaGoRoMo
+VITE_GOOGLE_MAPS_API_KEY=<your-google-maps-browser-key>
 VITE_VAPID_PUBLIC_KEY=BKtXMsDh4zX-TaKwy2asV9ZOKVfWirZLXes1bFMhMDJwHUf8mKsv4bGD2wwZfmzQKzGZI8ZvWJ517sUNkMT8Xqs
 ```
 
@@ -40,7 +40,7 @@ supabase functions deploy send-push
 
 supabase secrets set \
   VAPID_PUBLIC_KEY="BKtXMsDh4zX-TaKwy2asV9ZOKVfWirZLXes1bFMhMDJwHUf8mKsv4bGD2wwZfmzQKzGZI8ZvWJ517sUNkMT8Xqs" \
-  VAPID_PRIVATE_KEY="sKWG2NgiRd5tm5Ao02zI0nTpFeH5nNpAbtyJ3jGg8BQ" \
+  VAPID_PRIVATE_KEY="<your-vapid-private-key-keep-secret>" \
   VAPID_SUBJECT="mailto:you@example.com"
 ```
 

@@ -33,7 +33,7 @@ supabase functions deploy send-push --project-ref mavmgnvcfsvqajikcttf
 
 supabase secrets set --project-ref mavmgnvcfsvqajikcttf \
   VAPID_PUBLIC_KEY="BKtXMsDh4zX-TaKwy2asV9ZOKVfWirZLXes1bFMhMDJwHUf8mKsv4bGD2wwZfmzQKzGZI8ZvWJ517sUNkMT8Xqs" \
-  VAPID_PRIVATE_KEY="sKWG2NgiRd5tm5Ao02zI0nTpFeH5nNpAbtyJ3jGg8BQ" \
+  VAPID_PRIVATE_KEY="<your-vapid-private-key-keep-secret>" \
   VAPID_SUBJECT="mailto:you@example.com"
 ```
 
