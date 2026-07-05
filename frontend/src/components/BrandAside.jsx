@@ -1,4 +1,4 @@
-import { ShieldCheck, Clock3, IndianRupee, Star } from "lucide-react";
+import { ShieldCheck, Clock3, IndianRupee, Star, Car } from "lucide-react";
 
 /** Per-route copy for the aside. */
 const CONTENT = {
@@ -77,10 +77,10 @@ function RouteCard() {
       </svg>
 
       <div className="mt-3 flex items-center gap-3 rounded-2xl bg-white/10 p-3">
-        <div className="grid h-10 w-10 place-items-center rounded-xl bg-white/15 text-lg">🚗</div>
+        <div className="grid h-10 w-10 place-items-center rounded-xl bg-white/15 text-white"><Car className="h-5 w-5" /></div>
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium text-white">Prime Sedan · comfy &amp; AC</p>
-          <p className="text-xs text-white/60">Verified drivers · 4.9 ★ rated</p>
+          <p className="flex items-center gap-1 text-xs text-white/60">Verified drivers · 4.9 <Star className="h-3 w-3 fill-current" /> rated</p>
         </div>
       </div>
     </div>

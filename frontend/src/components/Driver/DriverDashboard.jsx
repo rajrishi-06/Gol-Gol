@@ -1,17 +1,55 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { MapPin, Route as RouteIcon, LogOut, Inbox } from "lucide-react";
+import { MapPin, Route as RouteIcon, LogOut, Inbox, Moon } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { distanceKm } from "../../lib/geo";
 import { notifyUser } from "../../lib/notify";
 import { formatCurrency, formatDistance } from "../../lib/format";
+import { cn } from "../../lib/cn";
 import RightPanel from "../RightPanel";
 import Logo from "../ui/Logo";
 import Button from "../ui/Button";
 import Card from "../ui/Card";
 import Spinner from "../ui/Spinner";
-import Badge from "../ui/Badge";
 import EmptyState from "../ui/EmptyState";
+
+/** On-duty switch — go offline (off-duty) without logging out of the app. */
+function DutyToggle({ online, onToggle }) {
+  return (
+    <div className="mt-4 flex items-center justify-between rounded-2xl border border-border bg-surface p-4 shadow-soft">
+      <div className="flex items-center gap-3">
+        <span className="relative flex h-2.5 w-2.5">
+          {online && <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-60" />}
+          <span className={cn("relative inline-flex h-2.5 w-2.5 rounded-full", online ? "bg-success" : "bg-subtle")} />
+        </span>
+        <div>
+          <p className="text-sm font-semibold text-foreground">{online ? "You're online" : "You're offline"}</p>
+          <p className="text-xs text-muted">
+            {online ? "Receiving nearby ride requests" : "Not receiving requests — still logged in"}
+          </p>
+        </div>
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={online}
+        aria-label={online ? "Go offline" : "Go online"}
+        onClick={onToggle}
+        className={cn(
+          "relative h-7 w-12 shrink-0 rounded-full transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+          online ? "bg-primary" : "bg-surface-3"
+        )}
+      >
+        <span
+          className={cn(
+            "absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform",
+            online ? "translate-x-[22px]" : "translate-x-0.5"
+          )}
+        />
+      </button>
+    </div>
+  );
+}
 
 function RideRequestCard({ ride, onAccept, isAccepting }) {
   return (
@@ -48,6 +86,7 @@ export default function DriverDashboard() {
   const [availableRides, setAvailableRides] = useState([]);
   const [loading, setLoading] = useState(true);
   const [acceptingRideId, setAcceptingRideId] = useState(null);
+  const [isOnline, setIsOnline] = useState(true);
   const initialFetched = useRef(false);
 
   const handleLogout = useCallback(async () => {
@@ -60,7 +99,6 @@ export default function DriverDashboard() {
 
   const fetchInitialRides = useCallback(async (location, vehicleType) => {
     if (!location || !vehicleType) return;
-    // Server-side matching (migration 0003): only nearby pending rides come back.
     const { data: pendingRides, error } = await supabase.rpc("nearby_pending_rides", {
       p_lat: location.lat,
       p_lng: location.lng,
@@ -70,6 +108,23 @@ export default function DriverDashboard() {
     if (!error && pendingRides) setAvailableRides(pendingRides);
     setLoading(false);
   }, []);
+
+  // Toggle on/off duty. Offline keeps the session but stops matching.
+  const toggleOnline = useCallback(async () => {
+    const driverId = localStorage.getItem("user_uuid");
+    const next = !isOnline;
+    setIsOnline(next);
+    await supabase
+      .from("active_drivers")
+      .update({ is_online: next, last_active_at: new Date().toISOString() })
+      .eq("user_id", driverId);
+    if (!next) {
+      setAvailableRides([]);
+    } else if (driverLocation && driverDetails) {
+      setLoading(true);
+      fetchInitialRides(driverLocation, driverDetails.vehicle_type);
+    }
+  }, [isOnline, driverLocation, driverDetails, fetchInitialRides]);
 
   useEffect(() => {
     const driverId = localStorage.getItem("user_uuid");
@@ -92,6 +147,14 @@ export default function DriverDashboard() {
       }
       if (!mounted) return;
       setDriverDetails(driverData);
+
+      // Sync the persisted duty state.
+      const { data: ad } = await supabase
+        .from("active_drivers")
+        .select("is_online")
+        .eq("user_id", driverId)
+        .maybeSingle();
+      if (mounted && ad) setIsOnline(ad.is_online ?? true);
 
       watcher = navigator.geolocation.watchPosition(
         async (position) => {
@@ -118,9 +181,9 @@ export default function DriverDashboard() {
     };
   }, [navigate, handleLogout, fetchInitialRides]);
 
-  // Realtime new/updated requests.
+  // Realtime new/updated requests — only while on duty.
   useEffect(() => {
-    if (!driverLocation || !driverDetails) return;
+    if (!isOnline || !driverLocation || !driverDetails) return;
     const channel = supabase
       .channel("public:rides")
       .on("postgres_changes", { event: "*", schema: "public", table: "rides" }, (payload) => {
@@ -140,7 +203,7 @@ export default function DriverDashboard() {
       })
       .subscribe();
     return () => supabase.removeChannel(channel);
-  }, [driverLocation, driverDetails]);
+  }, [isOnline, driverLocation, driverDetails]);
 
   const handleAcceptRide = async (rideId) => {
     setAcceptingRideId(rideId);
@@ -161,7 +224,7 @@ export default function DriverDashboard() {
         .eq("user_id", driverId);
       notifyUser({
         userId: updatedRide.rider_id,
-        title: "Driver on the way 🚗",
+        title: "Driver on the way",
         body: `A ${driverDetails?.vehicle_type || "driver"} accepted your ride and is heading to you.`,
         url: `/rider/ride/${rideId}`,
         type: "ride_accepted",
@@ -181,18 +244,21 @@ export default function DriverDashboard() {
           </Button>
         </header>
 
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Driver dashboard</h1>
-          <Badge tone={driverLocation ? "success" : "warning"} dot>
-            {driverLocation ? "Online" : "Locating…"}
-          </Badge>
-        </div>
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">Driver dashboard</h1>
         <p className="mt-1 text-sm text-muted">
           Requests for your <span className="font-medium text-foreground">{driverDetails?.vehicle_type || "vehicle"}</span> appear here in real time.
         </p>
 
-        <div className="mt-6 flex-1 space-y-3">
-          {loading ? (
+        <DutyToggle online={isOnline} onToggle={toggleOnline} />
+
+        <div className="mt-5 flex-1 space-y-3">
+          {!isOnline ? (
+            <EmptyState
+              icon={Moon}
+              title="You're off duty"
+              description="Flip the switch above to go back online and start receiving ride requests."
+            />
+          ) : loading ? (
             <div className="flex flex-col items-center gap-3 pt-16 text-muted">
               <Spinner className="h-6 w-6 text-primary" />
               <p className="text-sm">Finding rides near you…</p>

@@ -20,7 +20,7 @@ export default function Chatbox({ rideId, userId, messages, title = "Chat", reci
     setNewMessage("");
     await supabase.from("chat_messages").insert({ ride_id: rideId, sender_id: userId, message: text });
     if (recipientId) {
-      notifyUser({ userId: recipientId, title: "New message 💬", body: text, url: recipientUrl, type: "chat" });
+      notifyUser({ userId: recipientId, title: "New message", body: text, url: recipientUrl, type: "chat" });
     }
   };
 
@@ -29,7 +29,7 @@ export default function Chatbox({ rideId, userId, messages, title = "Chat", reci
       <div className="border-b border-border px-4 py-2.5 text-sm font-semibold text-foreground">{title}</div>
       <div className="flex h-56 flex-col gap-1.5 overflow-y-auto p-3">
         {messages.length === 0 && (
-          <p className="m-auto text-xs text-subtle">No messages yet — say hello 👋</p>
+          <p className="m-auto text-xs text-subtle">No messages yet — say hello</p>
         )}
         {messages.map((msg) => {
           const mine = msg.sender_id === userId;
