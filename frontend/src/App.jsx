@@ -20,6 +20,7 @@ const NotFound = lazy(() => import("./components/NotFound"));
 
 function App() {
   const [logIn, setLogIn] = useState(false);
+  const [sessionChecked, setSessionChecked] = useState(false);
   const [fromCords, setFromCords] = useState("");
   const [toCords, setToCords] = useState("");
   const [from, setFrom] = useState("");
@@ -31,41 +32,52 @@ function App() {
       const {
         data: { session },
       } = await supabase.auth.getSession();
-      if (!session) return;
 
-      setLogIn(true);
-      localStorage.setItem("user_uuid", session.user.id);
-      const userId = session.user.id;
+      if (session) {
+        setLogIn(true);
+        localStorage.setItem("user_uuid", session.user.id);
+        const userId = session.user.id;
 
-      // Resume an in-progress ride (rider), then driver, then fall back.
-      const { data: riderRide } = await supabase
-        .from("rides")
-        .select("id, status")
-        .eq("rider_id", userId)
-        .in("status", ["accepted", "ongoing"])
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (riderRide) return navigate(`/rider/ride/${riderRide.id}`);
+        // Resume an in-progress ride (rider), then driver, then fall back.
+        const { data: riderRide } = await supabase
+          .from("rides")
+          .select("id, status")
+          .eq("rider_id", userId)
+          .in("status", ["accepted", "ongoing"])
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (riderRide) {
+          setSessionChecked(true);
+          return navigate(`/rider/ride/${riderRide.id}`);
+        }
 
-      const { data: activeDriver } = await supabase
-        .from("active_drivers")
-        .select("current_ride_id, on_ride")
-        .eq("user_id", userId)
-        .maybeSingle();
-      if (activeDriver?.on_ride && activeDriver.current_ride_id) {
-        return navigate(`/driver/ride/${activeDriver.current_ride_id}`);
+        const { data: activeDriver } = await supabase
+          .from("active_drivers")
+          .select("current_ride_id, on_ride")
+          .eq("user_id", userId)
+          .maybeSingle();
+        if (activeDriver?.on_ride && activeDriver.current_ride_id) {
+          setSessionChecked(true);
+          return navigate(`/driver/ride/${activeDriver.current_ride_id}`);
+        }
+
+        const { data: driverRide } = await supabase
+          .from("rides")
+          .select("id, status")
+          .eq("driver_id", userId)
+          .in("status", ["accepted", "ongoing"])
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (driverRide) {
+          setSessionChecked(true);
+          return navigate(`/driver/ride/${driverRide.id}`);
+        }
       }
 
-      const { data: driverRide } = await supabase
-        .from("rides")
-        .select("id, status")
-        .eq("driver_id", userId)
-        .in("status", ["accepted", "ongoing"])
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (driverRide) return navigate(`/driver/ride/${driverRide.id}`);
+      // Session resolved — safe to render the app.
+      setSessionChecked(true);
     };
 
     checkSession();
@@ -80,6 +92,10 @@ function App() {
 
     return () => subscription?.unsubscribe();
   }, [navigate]);
+
+  // Hold the full render until the session check completes so users with
+  // active rides don't see a flash of the home screen before the redirect.
+  if (!sessionChecked) return <PageLoader />;
 
   return (
     <>

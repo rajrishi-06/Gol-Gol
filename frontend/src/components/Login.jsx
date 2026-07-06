@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, ShieldCheck } from "lucide-react";
 import { supabase } from "../lib/supabase";
+import { useDocumentTitle } from "../lib/useDocumentTitle";
 import RightPanel from "./RightPanel";
 import Logo from "./ui/Logo";
 import Button from "./ui/Button";
@@ -9,6 +10,7 @@ import Field, { Input } from "./ui/Field";
 import OtpInput from "./ui/OtpInput";
 
 export default function Login({ setLogIn }) {
+  useDocumentTitle("Log in");
   const [step, setStep] = useState(1);
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");

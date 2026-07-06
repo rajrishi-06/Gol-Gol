@@ -10,7 +10,7 @@ import Spinner from "./ui/Spinner";
 import Alert from "./ui/Alert";
 import Field, { Input, Textarea } from "./ui/Field";
 
-export default function PublishRide({ fromCords, toCords, fromValue, toValue, when, dateOfDeparture, setSelectedRide }) {
+export default function PublishRide({ fromCords, toCords, fromValue, toValue, when, dateOfDeparture }) {
   const user = localStorage.getItem("user_uuid");
   const [publishedRide, setPublishedRide] = useState(null);
   const [rideRequests, setRideRequests] = useState([]);
@@ -233,7 +233,7 @@ export default function PublishRide({ fromCords, toCords, fromValue, toValue, wh
       )}
 
       {publishedRide?.accepted_riders?.length > 0 && (
-        <Card interactive className="p-4" onClick={() => setSelectedRide(formatRideForMap(publishedRide))}>
+        <Card className="p-4">
           <h2 className="border-b border-border pb-2 text-sm font-semibold text-foreground">Accepted riders</h2>
           <div className="mt-2 space-y-2">
             {publishedRide.accepted_riders.map((rider, idx) => (

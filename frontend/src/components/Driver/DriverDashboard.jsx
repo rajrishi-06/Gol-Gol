@@ -6,6 +6,7 @@ import { distanceKm } from "../../lib/geo";
 import { notifyUser } from "../../lib/notify";
 import { formatCurrency, formatDistance } from "../../lib/format";
 import { cn } from "../../lib/cn";
+import { useDocumentTitle } from "../../lib/useDocumentTitle";
 import RightPanel from "../RightPanel";
 import Logo from "../ui/Logo";
 import Button from "../ui/Button";
@@ -80,6 +81,7 @@ function RideRequestCard({ ride, onAccept, isAccepting }) {
 }
 
 export default function DriverDashboard() {
+  useDocumentTitle("Driver Dashboard");
   const navigate = useNavigate();
   const [driverDetails, setDriverDetails] = useState(null);
   const [driverLocation, setDriverLocation] = useState(null);

@@ -8,3 +8,12 @@
 node_modules
 dist
 .firecrawl/
+
+# Environment files
+.env
+.env*.local
+*.env
+
+# Private dev notes — not for public repo
+docs/FLAW_AUDIT.md
+

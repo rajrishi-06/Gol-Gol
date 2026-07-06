@@ -111,7 +111,6 @@ export default function LeftPanel(props) {
           toValue={props.to}
           when={when}
           dateOfDeparture={dateOfDeparture}
-          setSelectedRide={props.setSelectedRide}
         />
       )}
 
@@ -121,7 +120,6 @@ export default function LeftPanel(props) {
           toCords={props.toCords}
           when={when}
           dateOfDeparture={dateOfDeparture}
-          setSelectedRide={props.setSelectedRide}
         />
       )}
     </div>

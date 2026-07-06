@@ -5,6 +5,7 @@ import { supabase } from "../../lib/supabase";
 import { distanceKm } from "../../lib/geo";
 import { notifyUser } from "../../lib/notify";
 import { publishRideLocation } from "../../lib/liveLocation";
+import { useDocumentTitle } from "../../lib/useDocumentTitle";
 import Chatbox from "../Chatbox";
 import Button from "../ui/Button";
 import Field, { Input } from "../ui/Field";
@@ -12,6 +13,7 @@ import RideSheet from "../RideSheet";
 import NavigationView from "./NavigationView";
 
 export default function DriverActiveRide() {
+  useDocumentTitle("Active Ride");
   const { rideId } = useParams();
   const navigate = useNavigate();
   const [ride, setRide] = useState(null);
@@ -20,6 +22,7 @@ export default function DriverActiveRide() {
   const [userId, setUserId] = useState(null);
   const [error, setError] = useState("");
   const [driverLocation, setDriverLocation] = useState(null);
+  const [nearDestination, setNearDestination] = useState(false);
 
   const handleEndRide = useCallback(
     async (isAutoEnd = false) => {
@@ -68,7 +71,12 @@ export default function DriverActiveRide() {
         }
         const r = rideRef.current;
         if (r?.status === "ongoing" && distanceKm(loc, { lat: r.to_lat, lng: r.to_lng }) < 0.03) {
-          endRideRef.current(true);
+          // Show a confirmation prompt instead of silently ending the ride.
+          // GPS can drift, so the driver must explicitly confirm arrival.
+          setNearDestination(true);
+          try {
+            speechSynthesis.speak(new SpeechSynthesisUtterance("You've arrived. Tap Complete Ride to finish."));
+          } catch { /* ignore */ }
         }
       },
       () => setError("Location access is required for navigation."),
@@ -201,13 +209,43 @@ export default function DriverActiveRide() {
       )}
 
       {ride.status === "ongoing" && (
-        <div className="mt-5 rounded-2xl border border-border bg-surface p-4 shadow-soft">
-          <h2 className="font-semibold text-foreground">Trip to destination</h2>
-          <p className="mt-1 text-sm text-muted">Follow turn-by-turn navigation. The ride ends automatically on arrival.</p>
-          <Button variant="danger" fullWidth className="mt-4" onClick={() => handleEndRide(false)}>
-            End ride manually
-          </Button>
-        </div>
+        nearDestination ? (
+          /* Arrival confirmation — shown instead of silently ending the ride */
+          <div className="mt-5 rounded-2xl border-2 border-primary bg-primary-subtle p-5 shadow-elevated">
+            <div className="flex items-center gap-3">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-primary text-white text-lg">
+                🏁
+              </span>
+              <div>
+                <h2 className="font-semibold text-foreground">You&apos;ve arrived!</h2>
+                <p className="text-xs text-muted">Confirm to complete the ride and collect payment.</p>
+              </div>
+            </div>
+            <div className="mt-4 flex gap-2">
+              <Button
+                fullWidth
+                onClick={() => handleEndRide(false)}
+              >
+                Complete ride
+              </Button>
+              <Button
+                variant="ghost"
+                fullWidth
+                onClick={() => setNearDestination(false)}
+              >
+                Not yet
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="mt-5 rounded-2xl border border-border bg-surface p-4 shadow-soft">
+            <h2 className="font-semibold text-foreground">Trip to destination</h2>
+            <p className="mt-1 text-sm text-muted">Follow turn-by-turn navigation. Tap when you arrive.</p>
+            <Button variant="danger" fullWidth className="mt-4" onClick={() => setNearDestination(true)}>
+              End ride
+            </Button>
+          </div>
+        )
       )}
 
       <div className="mt-5">

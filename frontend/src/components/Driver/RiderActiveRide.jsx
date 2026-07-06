@@ -18,6 +18,7 @@ import { fetchRoute } from "../../lib/geocoding";
 import { notifyUser } from "../../lib/notify";
 import { subscribeRideLocation } from "../../lib/liveLocation";
 import { formatCurrency } from "../../lib/format";
+import { useDocumentTitle } from "../../lib/useDocumentTitle";
 import Chatbox from "../Chatbox";
 import Button from "../ui/Button";
 import Spinner from "../ui/Spinner";
@@ -176,6 +177,7 @@ function RiderTrackingMap({ ride, riderLocation, driverLocation, destination, st
 }
 
 export default function RiderActiveRide() {
+  useDocumentTitle("Tracking Your Ride");
   const { rideId } = useParams();
   const navigate = useNavigate();
   const [ride, setRide] = useState(null);

@@ -1,22 +1,21 @@
-import { lazy, Suspense, useState } from "react";
+import { lazy, Suspense } from "react";
+import { Navigation } from "lucide-react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Navigation } from "lucide-react";
 import LeftPanel from "./LeftPanel";
 import HomeMap from "./HomeMap";
 import IdleGlobe from "./IdleGlobe";
 import ActiveRideAside from "./ActiveRideAside";
 import PageLoader from "./PageLoader";
 import { useActiveRide } from "../lib/useActiveRide";
+import { hasValidCoords } from "../lib/geo";
 
-// Defer the map bundle until the user actually opens the picker or previews a
-// route — the landing view loads without it.
+// Defer the map bundle until the user actually opens the picker.
 const MapPicker = lazy(() => import("./MapPicker"));
-const DriverRoute = lazy(() => import("./DriverRoute"));
 
 export default function Getride(props) {
   const [picking, setPicking] = useState(false);
   const [mode, setMode] = useState("from");
-  const [selectedRide, setSelectedRide] = useState(null);
   const { ride: activeRide, role } = useActiveRide();
   const navigate = useNavigate();
 
@@ -42,7 +41,6 @@ export default function Getride(props) {
         to={props.to}
         fromCords={props.fromCords}
         toCords={props.toCords}
-        setSelectedRide={setSelectedRide}
       />
 
       {picking ? (
@@ -55,21 +53,9 @@ export default function Getride(props) {
             setClickedLoc={setPicking}
           />
         </Suspense>
-      ) : selectedRide ? (
-        <div className="relative hidden flex-1 sm:block">
-          <Suspense fallback={<PageLoader />}>
-            <DriverRoute ride={selectedRide} />
-          </Suspense>
-          <button
-            onClick={() => setSelectedRide(null)}
-            className="absolute left-4 top-4 z-20 inline-flex items-center gap-1.5 rounded-xl bg-surface/90 px-3 py-2 text-sm font-medium text-foreground shadow-elevated backdrop-blur transition-colors hover:bg-surface focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <ArrowLeft className="h-4 w-4" /> Back
-          </button>
-        </div>
       ) : activeRide ? (
         <ActiveRideAside ride={activeRide} role={role} />
-      ) : props.fromCords?.lat ? (
+      ) : (hasValidCoords(props.fromCords) || hasValidCoords(props.toCords)) ? (
         <HomeMap fromCords={props.fromCords} toCords={props.toCords} />
       ) : (
         <IdleGlobe />
