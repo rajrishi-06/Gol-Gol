@@ -49,6 +49,9 @@ export default function HomeMap({ fromCords, toCords }) {
     return () => {
       cancelled = true;
     };
+    // Mount-once: the coordinates are read only to choose an initial centre.
+    // The effect below re-renders markers and the route whenever they change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Render markers and route whenever map is ready or coordinates change

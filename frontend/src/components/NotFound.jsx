@@ -6,7 +6,7 @@ import Logo from "./ui/Logo";
 /** Branded 404 — replaces the router silently rendering nothing. */
 export default function NotFound() {
   return (
-    <main className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-background px-6 text-center">
+    <main className="relative flex h-full flex-col items-center justify-center overflow-y-auto bg-background px-6 py-10 text-center">
       <div className="bg-grid absolute inset-0 opacity-40 [mask-image:radial-gradient(ellipse_at_center,black,transparent_70%)]" />
       <div className="relative animate-fade-up">
         <Link to="/" className="inline-flex">

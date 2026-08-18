@@ -80,8 +80,17 @@ create table if not exists public.user_settings (
   voice_guidance     boolean not null default true,
   share_trip_default boolean not null default false,
   language           text    not null default 'en',
+  default_payment_method text not null default 'cash'
+                         check (default_payment_method in ('cash','upi','card','wallet')),
   updated_at         timestamptz not null default now()
 );
+
+-- Idempotent for projects created before this column existed.
+alter table public.user_settings
+  add column if not exists default_payment_method text not null default 'cash';
+alter table public.user_settings drop constraint if exists user_settings_default_payment_method_check;
+alter table public.user_settings add constraint user_settings_default_payment_method_check
+  check (default_payment_method in ('cash','upi','card','wallet'));
 
 -- ###########################################################################
 -- 3. RIDES — lifecycle timestamps, money, cancellation, scheduling

@@ -1,64 +1,25 @@
-import { useEffect, useState } from "react";
-import { useNavigate, Navigate } from "react-router-dom";
-import { supabase } from "../../lib/supabase";
+import { Navigate, useLocation } from "react-router-dom";
+import { useAuth } from "../../lib/auth.jsx";
+import PageLoader from "../PageLoader";
 
 /**
- * Guards driver-only routes: requires a logged-in user whose `drivers` record
- * is `approved`, and marks them online in `active_drivers` on entry.
+ * Guards driver-only routes.
  *
- * Hooks are always called in the same order (the early `logIn` return lives
- * below them) to satisfy the rules of hooks.
+ * It no longer flips the driver online as a side effect of navigation — that
+ * quietly overrode an explicit "go off duty" every time the dashboard mounted.
+ * Duty is now only ever changed by the driver, through the duty switch.
  */
-export default function ProtectedDriverRoute({ logIn, children }) {
-  const [status, setStatus] = useState("loading");
-  const navigate = useNavigate();
+export default function ProtectedDriverRoute({ children }) {
+  const { loading, isAuthenticated, driver, isApprovedDriver } = useAuth();
+  const location = useLocation();
 
-  useEffect(() => {
-    if (!logIn) return;
-    (async () => {
-      const user_uuid = localStorage.getItem("user_uuid");
-      if (!user_uuid) {
-        setStatus("unauthorized");
-        navigate("/");
-        return;
-      }
-      const { data: driver, error } = await supabase
-        .from("drivers")
-        .select("verification_status")
-        .eq("user_id", user_uuid)
-        .maybeSingle();
+  if (loading) return <PageLoader />;
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+  }
+  // No application yet, or still pending/rejected → the onboarding screen
+  // explains exactly where they stand.
+  if (!driver || !isApprovedDriver) return <Navigate to="/driver/activate" replace />;
 
-      if (error) {
-        setStatus("unauthorized");
-        navigate("/");
-        return;
-      }
-      if (driver?.verification_status === "approved") {
-        setStatus("approved");
-        try {
-          await supabase.from("active_drivers").upsert(
-            { user_id: user_uuid, is_online: true, last_active_at: new Date().toISOString() },
-            { onConflict: "user_id" }
-          );
-        } catch {
-          /* non-fatal */
-        }
-      } else {
-        setStatus("unauthorized");
-        navigate("/driver/activate");
-      }
-    })();
-  }, [logIn, navigate]);
-
-  if (!logIn) return <Navigate to="/" replace />;
-  if (status === "approved") return <>{children}</>;
-
-  return (
-    <div className="flex h-[100dvh] items-center justify-center bg-background">
-      <div className="text-center">
-        <h2 className="text-xl font-semibold text-foreground">Verifying access</h2>
-        <p className="mt-2 text-sm text-muted">Checking your driver credentials…</p>
-      </div>
-    </div>
-  );
+  return children;
 }

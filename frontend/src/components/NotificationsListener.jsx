@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { supabase } from "../lib/supabase";
+import { useAuth } from "../lib/auth.jsx";
 
 /**
  * App-wide notification toaster. Subscribes to the signed-in user's
@@ -10,18 +11,7 @@ import { supabase } from "../lib/supabase";
  */
 export default function NotificationsListener() {
   const navigate = useNavigate();
-  const [userId, setUserId] = useState(null);
-
-  // Track auth as state so the subscription effect below can cleanly tear down
-  // and re-create its channel via React's lifecycle (avoids re-subscribing a
-  // same-named channel, which throws "callbacks after subscribe()").
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => setUserId(session?.user?.id ?? null));
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_e, session) => setUserId(session?.user?.id ?? null));
-    return () => subscription?.unsubscribe();
-  }, []);
+  const { userId } = useAuth();
 
   useEffect(() => {
     if (!userId) return;

@@ -3,7 +3,7 @@ import { LogoMark } from "./ui/Logo";
 /** Suspense fallback shown while a lazily-loaded route chunk downloads. */
 export default function PageLoader() {
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-background">
+    <div className="flex h-full min-h-[60dvh] flex-col items-center justify-center gap-4 bg-background">
       <div className="animate-float">
         <LogoMark size={44} />
       </div>

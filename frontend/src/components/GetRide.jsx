@@ -1,87 +1,70 @@
-import { lazy, Suspense } from "react";
-import { Navigation } from "lucide-react";
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { lazy, Suspense, useState } from "react";
+import { useDocumentTitle } from "../lib/useDocumentTitle";
+import { useBooking } from "../lib/booking.jsx";
+import { useActiveRide } from "../lib/activeRide.jsx";
+import { hasValidCoords } from "../lib/geo";
+import TopBar from "./layout/TopBar";
 import LeftPanel from "./LeftPanel";
 import HomeMap from "./HomeMap";
 import IdleGlobe from "./IdleGlobe";
 import ActiveRideAside from "./ActiveRideAside";
 import PageLoader from "./PageLoader";
-import { useActiveRide } from "../lib/useActiveRide";
-import { hasValidCoords } from "../lib/geo";
 
 // Defer the map bundle until the user actually opens the picker.
 const MapPicker = lazy(() => import("./MapPicker"));
 
-export default function Getride(props) {
-  const [picking, setPicking] = useState(false);
-  const [mode, setMode] = useState("from");
+/**
+ * Home: book a ride.
+ *
+ * The persistent shell handles navigation and the in-ride strip now, so this
+ * screen only owns the booking panel and the map beside it.
+ */
+export default function Home() {
+  useDocumentTitle(null);
+  const trip = useBooking();
   const { ride: activeRide, role } = useActiveRide();
-  const navigate = useNavigate();
+  const [picking, setPicking] = useState(null); // "from" | "to" | null
 
-  const isFrom = mode === "from";
-  const initialCenter = isFrom ? props.fromCords : props.toCords;
+  const isFrom = picking === "from";
+  const initialCenter = isFrom ? trip.fromCords : trip.toCords;
 
-  const openPicker = (nextMode) => {
-    setMode(nextMode);
-    setPicking(true);
+  const commitPick = (address, coords) => {
+    if (isFrom) trip.setPickup(address, coords);
+    else trip.setDrop(address, coords);
   };
 
-  const returnToRide = () =>
-    navigate(role === "driver" ? `/driver/ride/${activeRide.id}` : `/rider/ride/${activeRide.id}`);
+  const showRoute = hasValidCoords(trip.fromCords) || hasValidCoords(trip.toCords);
 
   return (
-    <div className="flex h-[100dvh] flex-col overflow-hidden sm:flex-row">
-      <LeftPanel
-        logIn={props.logIn}
-        setMode={setMode}
-        setClickedFrom={() => openPicker("from")}
-        setClickedTo={() => openPicker("to")}
-        from={props.from}
-        to={props.to}
-        fromCords={props.fromCords}
-        toCords={props.toCords}
-      />
+    <div className="flex h-full flex-col">
+      <TopBar title="Book a ride" subtitle="Instant cabs, autos and shared commutes" />
 
-      {picking ? (
-        <Suspense fallback={<div className="fixed inset-0 z-50 sm:relative sm:flex-1"><PageLoader /></div>}>
-          <MapPicker
-            mode={mode}
-            initialCenter={initialCenter}
-            setLoc={isFrom ? props.setFrom : props.setTo}
-            setCords={isFrom ? props.setFromCords : props.setToCords}
-            setClickedLoc={setPicking}
-          />
-        </Suspense>
-      ) : activeRide ? (
-        <ActiveRideAside ride={activeRide} role={role} />
-      ) : (hasValidCoords(props.fromCords) || hasValidCoords(props.toCords)) ? (
-        <HomeMap fromCords={props.fromCords} toCords={props.toCords} />
-      ) : (
-        <IdleGlobe />
-      )}
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden sm:flex-row">
+        <LeftPanel onPickFrom={() => setPicking("from")} onPickTo={() => setPicking("to")} />
 
-      {/* Mobile: the aside is hidden, so surface a persistent return-to-ride bar. */}
-      {activeRide && !picking && (
-        <button
-          onClick={returnToRide}
-          className="animate-fade-up fixed inset-x-3 bottom-3 z-40 flex items-center justify-between gap-3 rounded-2xl bg-primary px-4 py-3 text-primary-fg shadow-floating sm:hidden"
-        >
-          <span className="flex items-center gap-2.5 text-left">
-            <span className="relative flex h-2.5 w-2.5">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white/70" />
-              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-white" />
-            </span>
-            <span>
-              <span className="block text-sm font-semibold">Ride in progress</span>
-              <span className="block text-xs text-primary-fg/80">
-                {role === "driver" ? "Tap to resume navigation" : "Tap to return to live map"}
-              </span>
-            </span>
-          </span>
-          <Navigation className="h-5 w-5" />
-        </button>
-      )}
+        {picking ? (
+          <Suspense
+            fallback={
+              <div className="fixed inset-0 z-50 sm:relative sm:inset-auto sm:flex-1">
+                <PageLoader />
+              </div>
+            }
+          >
+            <MapPicker
+              mode={picking}
+              initialCenter={initialCenter}
+              onConfirm={commitPick}
+              onClose={() => setPicking(null)}
+            />
+          </Suspense>
+        ) : activeRide ? (
+          <ActiveRideAside ride={activeRide} role={role} />
+        ) : showRoute ? (
+          <HomeMap fromCords={trip.fromCords} toCords={trip.toCords} />
+        ) : (
+          <IdleGlobe />
+        )}
+      </div>
     </div>
   );
 }

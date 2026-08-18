@@ -81,8 +81,30 @@ export function estimateFare(rideId, distance) {
   };
 }
 
-/** Vehicle categories a driver can register (registration ≠ hail catalogue). */
+/** Vehicle body types a driver can register. */
 export const DRIVER_VEHICLE_TYPES = ["car", "bike", "auto", "van", "truck"];
+
+/**
+ * Which rider-facing service classes each body type is allowed to serve.
+ *
+ * This mapping is the fix for the bug that made most of the catalogue
+ * undispatchable: drivers registered a body type (`car`) while riders booked a
+ * service class (`mini`/`sedan`/`suv`), and matching compared the two strings
+ * directly — so a car driver never saw three of the five ride classes. The
+ * driver now picks a class, and `drivers.vehicle_class` is what dispatch keys on.
+ */
+export const VEHICLE_CLASS_OPTIONS = {
+  bike: ["bike"],
+  auto: ["auto"],
+  car: ["mini", "sedan"],
+  van: ["suv"],
+  truck: ["suv"],
+};
+
+/** Service classes available for a body type (empty when unknown). */
+export function SERVICE_CLASSES_FOR(vehicleType) {
+  return VEHICLE_CLASS_OPTIONS[vehicleType] ?? [];
+}
 
 /** Icon path for any vehicle type, with a safe fallback. */
 export function vehicleIcon(type) {

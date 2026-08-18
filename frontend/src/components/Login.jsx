@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { ArrowLeft, ShieldCheck } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { useDocumentTitle } from "../lib/useDocumentTitle";
@@ -9,7 +9,7 @@ import Button from "./ui/Button";
 import Field, { Input } from "./ui/Field";
 import OtpInput from "./ui/OtpInput";
 
-export default function Login({ setLogIn }) {
+export default function Login() {
   useDocumentTitle("Log in");
   const [step, setStep] = useState(1);
   const [phone, setPhone] = useState("");
@@ -21,6 +21,9 @@ export default function Login({ setLogIn }) {
   const [loading, setLoading] = useState(false);
   const [resendIn, setResendIn] = useState(0);
   const navigate = useNavigate();
+  const location = useLocation();
+  // Come back to whatever the user was trying to reach, not always the home screen.
+  const redirectTo = location.state?.from || "/";
 
   const phoneIsValid = phone.length === 10;
   const otpIsValid = otp.length === 6;
@@ -42,8 +45,9 @@ export default function Login({ setLogIn }) {
     setError("");
     setLoading(true);
     try {
-      // maybeSingle → no 406 when the number isn't registered yet.
-      const { data: existing } = await supabase.from("users").select("id").eq("mobile", phone).maybeSingle();
+      // A definer RPC, so `public.users` no longer has to be readable by anon —
+      // that grant let anyone enumerate every registered mobile number.
+      const { data: existing } = await supabase.rpc("mobile_exists", { p_mobile: phone });
       if (existing) {
         setIsNewUser(false);
         await sendOtp();
@@ -82,8 +86,8 @@ export default function Login({ setLogIn }) {
         error,
       } = await supabase.auth.verifyOtp({ phone: `+91${phone}`, token: otp, type: "sms" });
       if (error || !session) throw error || new Error("no session");
-      setLogIn?.(true);
-      navigate("/");
+      // AuthProvider picks the session up from onAuthStateChange.
+      navigate(redirectTo, { replace: true });
     } catch {
       setError("That code didn't match. Please try again.");
       setOtp("");
@@ -114,8 +118,8 @@ export default function Login({ setLogIn }) {
   };
 
   return (
-    <div className="flex h-[100dvh] flex-col overflow-hidden sm:flex-row">
-      <div className="flex w-full flex-col overflow-y-auto bg-background px-6 py-6 sm:w-[500px] sm:shrink-0 sm:border-r sm:border-border lg:w-[540px]">
+    <div className="flex h-full flex-col overflow-hidden sm:flex-row">
+      <div className="flex w-full flex-col overflow-y-auto bg-background px-6 py-6 sm:w-[460px] sm:shrink-0 sm:border-r sm:border-border lg:w-[500px]">
         <header className="flex items-center justify-between">
           <button
             onClick={handleBack}

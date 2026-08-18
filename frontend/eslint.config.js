@@ -36,4 +36,11 @@ export default [
       ],
     },
   },
+  {
+    // Context providers deliberately export both a component and its hook —
+    // that pairing is the whole point of the module, and Fast Refresh handles
+    // it fine because the hook is not itself a component.
+    files: ['src/lib/**/*.jsx'],
+    rules: { 'react-refresh/only-export-components': 'off' },
+  },
 ]

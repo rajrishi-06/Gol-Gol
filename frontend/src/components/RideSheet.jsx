@@ -13,7 +13,7 @@ export default function RideSheet({ map, title = "Ride details", children }) {
 
   if (!isMobile) {
     return (
-      <div className="flex h-[100dvh] overflow-hidden">
+      <div className="flex h-full overflow-hidden">
         <aside className="flex w-[500px] shrink-0 flex-col overflow-y-auto border-r border-border bg-background px-6 py-6 lg:w-[540px]">
           {children}
         </aside>
@@ -23,7 +23,7 @@ export default function RideSheet({ map, title = "Ride details", children }) {
   }
 
   return (
-    <div className="relative h-[100dvh] overflow-hidden">
+    <div className="relative h-full overflow-hidden">
       <div className="absolute inset-0">{map}</div>
       <Drawer.Root open onOpenChange={() => {}} modal={false} dismissible={false} snapPoints={[0.4, 0.94]}>
         <Drawer.Portal>

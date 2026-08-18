@@ -41,8 +41,6 @@ function short(distanceM) {
   return `${(distanceM / 1000).toFixed(1)} km`;
 }
 
-let voicePref = true;
-
 /**
  * Full-screen turn-by-turn navigation, styled like Google Maps: a bold top
  * maneuver banner, a bottom trip bar (ETA · distance · arrival + exit), a
@@ -57,6 +55,8 @@ export default function NavigationView({
   vehicleType,
   phase = "pickup", // "pickup" | "dropoff"
   destinationLabel = "destination",
+  voiceEnabled = true,
+  onEta,
   onExit,
 }) {
   const containerRef = useRef(null);
@@ -71,8 +71,14 @@ export default function NavigationView({
   const [stepIdx, setStepIdx] = useState(0);
   const [eta, setEta] = useState(null); // { min, km }
   const [following, setFollowing] = useState(true);
-  const [muted, setMuted] = useState(!voicePref);
+  // Seeded from the driver's saved preference instead of a module-level global
+  // that reset on every reload.
+  const [muted, setMuted] = useState(!voiceEnabled);
   const [ready, setReady] = useState(false);
+  const onEtaRef = useRef(onEta);
+  useEffect(() => {
+    onEtaRef.current = onEta;
+  }, [onEta]);
 
   const speak = useCallback((text) => {
     if (muted) return;
@@ -93,7 +99,12 @@ export default function NavigationView({
       const route = await fetchRoute([origin, destination], { steps: true });
       if (!route) return;
       lastRouteOriginRef.current = origin;
-      setEta({ min: Math.max(1, Math.round(route.duration / 60)), km: route.distance / 1000 });
+      const minutes = Math.max(1, Math.round(route.duration / 60));
+      const km = route.distance / 1000;
+      setEta({ min: minutes, km });
+      // Publish the ETA so the rider (and any shared-trip viewer) quotes the
+      // same number the driver is looking at.
+      onEtaRef.current?.(minutes, Number(km.toFixed(2)));
       setSteps(route.legs[0]?.steps ?? []);
       setStepIdx(0);
       spokenRef.current = new Set();
@@ -181,6 +192,13 @@ export default function NavigationView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [origin, steps]);
 
+  // Traffic changes even when the vehicle doesn't, so refresh on a timer too.
+  useEffect(() => {
+    if (!ready) return undefined;
+    const timer = setInterval(() => refreshRoute(), 90000);
+    return () => clearInterval(timer);
+  }, [ready, refreshRoute]);
+
   const recenter = () => {
     followRef.current = true;
     setFollowing(true);
@@ -191,9 +209,16 @@ export default function NavigationView({
   };
 
   const toggleMute = () => {
-    voicePref = muted; // flip persisted pref
-    setMuted((m) => !m);
-    if (!muted) speechSynthesis.cancel();
+    setMuted((m) => {
+      if (!m) {
+        try {
+          speechSynthesis.cancel();
+        } catch {
+          /* unsupported */
+        }
+      }
+      return !m;
+    });
   };
 
   const activeStep = steps[stepIdx];

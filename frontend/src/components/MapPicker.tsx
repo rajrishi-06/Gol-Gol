@@ -4,10 +4,11 @@ import { loadGoogleMaps, createMap, restrictionAround, attachCenterZoom, minZoom
 import { reverseGeocode, forwardGeocode, resolvePlace } from "../lib/geocoding";
 
 interface MapPickerProps {
-  setLoc: (value: string) => void;
-  setClickedLoc: (flag: boolean) => void;
-  setCords: (coords: { lat: number; lng: number }) => void;
-  initialCenter?: { lat: number; lng: number };
+  /** Called with the chosen address and its coordinates. */
+  onConfirm: (address: string, coords: { lat: number; lng: number }) => void;
+  /** Dismiss without choosing. */
+  onClose: () => void;
+  initialCenter?: { lat: number; lng: number } | null;
   mode: "from" | "to";
 }
 
@@ -19,7 +20,7 @@ interface Suggestion {
   center: [number, number] | null;
 }
 
-const MapPicker: React.FC<MapPickerProps> = ({ setLoc, setClickedLoc, setCords, initialCenter, mode }) => {
+const MapPicker: React.FC<MapPickerProps> = ({ onConfirm, onClose, initialCenter, mode }) => {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
   const zoomCleanupRef = useRef<(() => void) | null>(null);
@@ -197,9 +198,9 @@ const MapPicker: React.FC<MapPickerProps> = ({ setLoc, setClickedLoc, setCords, 
   };
 
   const handleConfirm = () => {
-    setLoc(searchInput);
-    setCords({ lat: coords.lat, lng: coords.lng });
-    setClickedLoc(false);
+    const label = searchInput.trim() || `${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)}`;
+    onConfirm(label, { lat: coords.lat, lng: coords.lng });
+    onClose();
   };
 
   return (
@@ -210,7 +211,7 @@ const MapPicker: React.FC<MapPickerProps> = ({ setLoc, setClickedLoc, setCords, 
       <div className="absolute inset-x-0 top-0 z-30 p-3 sm:p-4">
         <div className="mx-auto flex w-full max-w-xl items-center gap-2 rounded-2xl border border-border bg-surface/95 p-1.5 shadow-floating backdrop-blur">
           <button
-            onClick={() => setClickedLoc(false)}
+            onClick={onClose}
             aria-label="Cancel and go back"
             className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-muted transition-colors hover:bg-surface-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
           >

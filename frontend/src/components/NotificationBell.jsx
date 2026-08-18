@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Bell, Check, BellRing } from "lucide-react";
 import { supabase } from "../lib/supabase";
+import { useAuth } from "../lib/auth.jsx";
 import { markNotificationRead, markAllNotificationsRead } from "../lib/notify";
 import { enablePush, pushPermission, pushSupported } from "../lib/push";
 import { cn } from "../lib/cn";
@@ -18,7 +19,7 @@ function timeAgo(iso) {
 
 export default function NotificationBell() {
   const navigate = useNavigate();
-  const [userId, setUserId] = useState(null);
+  const { userId } = useAuth();
   const [items, setItems] = useState([]);
   const [open, setOpen] = useState(false);
   const [perm, setPerm] = useState(() => pushPermission());
@@ -26,35 +27,40 @@ export default function NotificationBell() {
 
   const unread = items.filter((n) => !n.read).length;
 
-  // Resolve the signed-in user, load recent notifications, subscribe to changes.
+  // Load recent notifications and keep them live. Identity comes from the auth
+  // context, so the bell can't disagree with the rest of the app about who is
+  // signed in.
   useEffect(() => {
-    let channel;
+    if (!userId) {
+      setItems([]);
+      return undefined;
+    }
+    let active = true;
     (async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      const uid = session?.user?.id;
-      if (!uid) return;
-      setUserId(uid);
       const { data } = await supabase
         .from("notifications")
         .select("*")
-        .eq("user_id", uid)
+        .eq("user_id", userId)
         .order("created_at", { ascending: false })
         .limit(20);
-      setItems(data || []);
-      channel = supabase
-        .channel(`notif-bell:${uid}:${Math.random().toString(36).slice(2)}`)
-        .on("postgres_changes", { event: "INSERT", schema: "public", table: "notifications", filter: `user_id=eq.${uid}` }, (p) =>
-          setItems((prev) => [p.new, ...prev].slice(0, 20))
-        )
-        .on("postgres_changes", { event: "UPDATE", schema: "public", table: "notifications", filter: `user_id=eq.${uid}` }, (p) =>
-          setItems((prev) => prev.map((n) => (n.id === p.new.id ? p.new : n)))
-        )
-        .subscribe();
+      if (active) setItems(data || []);
     })();
+
+    const channel = supabase
+      .channel(`notif-bell:${userId}:${Math.random().toString(36).slice(2)}`)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "notifications", filter: `user_id=eq.${userId}` }, (p) =>
+        setItems((prev) => [p.new, ...prev].slice(0, 20))
+      )
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "notifications", filter: `user_id=eq.${userId}` }, (p) =>
+        setItems((prev) => prev.map((n) => (n.id === p.new.id ? p.new : n)))
+      )
+      .subscribe();
+
     return () => {
-      if (channel) supabase.removeChannel(channel);
+      active = false;
+      supabase.removeChannel(channel);
     };
-  }, []);
+  }, [userId]);
 
   // Close on outside click / Escape.
   useEffect(() => {

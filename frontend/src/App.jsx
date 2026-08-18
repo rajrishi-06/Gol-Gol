@@ -1,175 +1,216 @@
-import { lazy, Suspense, useEffect, useState } from "react";
-import { Routes, Route, useNavigate } from "react-router-dom";
-import { supabase } from "./lib/supabase";
+import { lazy, Suspense, useEffect, useRef } from "react";
+import { Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "./lib/auth.jsx";
+import { useActiveRide } from "./lib/activeRide.jsx";
 import ProtectedRoute from "./components/ProtectedRoute";
 import ProtectedDriverRoute from "./components/Driver/ProtectedDriverRoute";
+import AdminRoute from "./components/AdminRoute";
+import AppLayout from "./components/layout/AppLayout";
 import PageLoader from "./components/PageLoader";
 import NotificationsListener from "./components/NotificationsListener";
 
-// Route-level code splitting: heavy Mapbox + driver flows load on demand,
-// keeping the initial bundle (landing + login) small.
-const Getride = lazy(() => import("./components/GetRide"));
+// Route-level code splitting: heavy map + driver flows load on demand, so the
+// first paint (landing + login) stays small.
+const Home = lazy(() => import("./components/GetRide"));
 const Login = lazy(() => import("./components/Login"));
-const Dashboard = lazy(() => import("./components/Dashboard"));
 const Book = lazy(() => import("./components/Book"));
+const Account = lazy(() => import("./pages/Account"));
+const Activity = lazy(() => import("./pages/Activity"));
+const TripDetail = lazy(() => import("./pages/TripDetail"));
+const Wallet = lazy(() => import("./pages/Wallet"));
+const Settings = lazy(() => import("./pages/Settings"));
+const SavedPlaces = lazy(() => import("./pages/SavedPlaces"));
+const Safety = lazy(() => import("./pages/Safety"));
+const Help = lazy(() => import("./pages/Help"));
+const Earnings = lazy(() => import("./pages/Earnings"));
+const AdminDrivers = lazy(() => import("./pages/AdminDrivers"));
+const SharedTrip = lazy(() => import("./pages/SharedTrip"));
 const DriverActivate = lazy(() => import("./components/Driver/DriverActivate"));
 const DriverDashboard = lazy(() => import("./components/Driver/DriverDashboard"));
 const DriverActiveRide = lazy(() => import("./components/Driver/DriverActiveRide"));
 const RiderActiveRide = lazy(() => import("./components/Driver/RiderActiveRide"));
 const NotFound = lazy(() => import("./components/NotFound"));
 
-function App() {
-  const [logIn, setLogIn] = useState(false);
-  const [sessionChecked, setSessionChecked] = useState(false);
-  const [fromCords, setFromCords] = useState("");
-  const [toCords, setToCords] = useState("");
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
+/**
+ * Drop someone straight back into a ride they're already on — but only once,
+ * on the first load, and only from the home screen. The persistent ride strip
+ * in the shell handles every other case, so navigation is never hijacked
+ * mid-session.
+ */
+function RideResume() {
+  const { ride, role, loading } = useActiveRide();
+  const { pathname } = useLocation();
   const navigate = useNavigate();
+  const done = useRef(false);
 
   useEffect(() => {
-    const checkSession = async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
-      if (session) {
-        setLogIn(true);
-        localStorage.setItem("user_uuid", session.user.id);
-        const userId = session.user.id;
-
-        // Resume an in-progress ride (rider), then driver, then fall back.
-        const { data: riderRide } = await supabase
-          .from("rides")
-          .select("id, status")
-          .eq("rider_id", userId)
-          .in("status", ["accepted", "ongoing"])
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        if (riderRide) {
-          setSessionChecked(true);
-          return navigate(`/rider/ride/${riderRide.id}`);
-        }
-
-        const { data: activeDriver } = await supabase
-          .from("active_drivers")
-          .select("current_ride_id, on_ride")
-          .eq("user_id", userId)
-          .maybeSingle();
-        if (activeDriver?.on_ride && activeDriver.current_ride_id) {
-          setSessionChecked(true);
-          return navigate(`/driver/ride/${activeDriver.current_ride_id}`);
-        }
-
-        const { data: driverRide } = await supabase
-          .from("rides")
-          .select("id, status")
-          .eq("driver_id", userId)
-          .in("status", ["accepted", "ongoing"])
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        if (driverRide) {
-          setSessionChecked(true);
-          return navigate(`/driver/ride/${driverRide.id}`);
-        }
-      }
-
-      // Session resolved — safe to render the app.
-      setSessionChecked(true);
-    };
-
-    checkSession();
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setLogIn(!!session);
-      if (session) localStorage.setItem("user_uuid", session.user.id);
-      else localStorage.removeItem("user_uuid");
+    if (done.current || loading) return;
+    done.current = true;
+    if (!ride || pathname !== "/") return;
+    navigate(role === "driver" ? `/driver/ride/${ride.id}` : `/rider/ride/${ride.id}`, {
+      replace: true,
     });
+  }, [ride, role, loading, pathname, navigate]);
 
-    return () => subscription?.unsubscribe();
-  }, [navigate]);
+  return null;
+}
 
-  // Hold the full render until the session check completes so users with
-  // active rides don't see a flash of the home screen before the redirect.
-  if (!sessionChecked) return <PageLoader />;
+export default function App() {
+  const { loading } = useAuth();
+
+  // Hold the first paint until the session resolves, so protected routes don't
+  // flash the login screen for a signed-in user.
+  if (loading) return <PageLoader />;
 
   return (
     <>
       <NotificationsListener />
+      <RideResume />
       <Suspense fallback={<PageLoader />}>
         <Routes>
-        <Route
-          path="/"
-          element={
-            <Getride
-              logIn={logIn}
-              fromCords={fromCords}
-              toCords={toCords}
-              setFromCords={setFromCords}
-              setToCords={setToCords}
-              from={from}
-              to={to}
-              setFrom={setFrom}
-              setTo={setTo}
+          <Route element={<AppLayout />}>
+            {/* public */}
+            <Route path="/" element={<Home />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/help" element={<Help />} />
+            <Route path="/t/:token" element={<SharedTrip />} />
+
+            {/* riding */}
+            <Route
+              path="/book"
+              element={
+                <ProtectedRoute>
+                  <Book />
+                </ProtectedRoute>
+              }
             />
-          }
-        />
+            <Route
+              path="/activity"
+              element={
+                <ProtectedRoute>
+                  <Activity />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/activity/:rideId"
+              element={
+                <ProtectedRoute>
+                  <TripDetail />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/wallet"
+              element={
+                <ProtectedRoute>
+                  <Wallet />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/rider/ride/:rideId"
+              element={
+                <ProtectedRoute>
+                  <RiderActiveRide />
+                </ProtectedRoute>
+              }
+            />
 
-        <Route path="/login" element={<Login setLogIn={setLogIn} />} />
+            {/* account */}
+            <Route
+              path="/account"
+              element={
+                <ProtectedRoute>
+                  <Account />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/account/settings"
+              element={
+                <ProtectedRoute>
+                  <Settings />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/account/places"
+              element={
+                <ProtectedRoute>
+                  <SavedPlaces />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/account/safety"
+              element={
+                <ProtectedRoute>
+                  <Safety />
+                </ProtectedRoute>
+              }
+            />
 
-        <Route
-          path="/dashboard"
-          element={
-            <ProtectedRoute logIn={logIn}>
-              <Dashboard setLogIn={setLogIn} />
-            </ProtectedRoute>
-          }
-        />
+            {/* driving */}
+            <Route
+              path="/driver/activate"
+              element={
+                <ProtectedRoute>
+                  <DriverActivate />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/driver/dashboard"
+              element={
+                <ProtectedDriverRoute>
+                  <DriverDashboard />
+                </ProtectedDriverRoute>
+              }
+            />
+            <Route
+              path="/driver/trips"
+              element={
+                <ProtectedDriverRoute>
+                  <Activity defaultRole="driver" />
+                </ProtectedDriverRoute>
+              }
+            />
+            <Route
+              path="/driver/earnings"
+              element={
+                <ProtectedDriverRoute>
+                  <Earnings />
+                </ProtectedDriverRoute>
+              }
+            />
+            <Route
+              path="/driver/ride/:rideId"
+              element={
+                <ProtectedRoute>
+                  <DriverActiveRide />
+                </ProtectedRoute>
+              }
+            />
 
-        <Route
-          path="/driver/activate"
-          element={
-            <ProtectedRoute logIn={logIn}>
-              <DriverActivate />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/driver/dashboard"
-          element={
-            <ProtectedDriverRoute logIn={logIn}>
-              <DriverDashboard />
-            </ProtectedDriverRoute>
-          }
-        />
-        <Route
-          path="/driver/ride/:rideId"
-          element={
-            <ProtectedRoute logIn={logIn}>
-              <DriverActiveRide />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/rider/ride/:rideId"
-          element={
-            <ProtectedRoute logIn={logIn}>
-              <RiderActiveRide />
-            </ProtectedRoute>
-          }
-        />
+            {/* admin */}
+            <Route
+              path="/admin/drivers"
+              element={
+                <AdminRoute>
+                  <AdminDrivers />
+                </AdminRoute>
+              }
+            />
 
-        <Route path="/book" element={<Book fromCords={fromCords} toCords={toCords} />} />
+            {/* legacy paths */}
+            <Route path="/dashboard" element={<Navigate to="/account" replace />} />
+            <Route path="/rides" element={<Navigate to="/activity" replace />} />
 
-        <Route path="*" element={<NotFound />} />
+            <Route path="*" element={<NotFound />} />
+          </Route>
         </Routes>
       </Suspense>
     </>
   );
 }
-
-export default App;
