@@ -7,6 +7,7 @@ import { useAuth } from "../../lib/auth.jsx";
 import { useRideLive } from "../../lib/useRideLive";
 import { useDriverPresence } from "../../lib/useDriverPresence";
 import { completeRide, markArrived, startRide, updateRideEta } from "../../lib/rides";
+import { acceptPooledRide, driverTripState, poolableRides } from "../../lib/pooling";
 import { distanceKm } from "../../lib/geo";
 import { notifyUser } from "../../lib/notify";
 import { publishRideLocation } from "../../lib/liveLocation";
@@ -24,10 +25,15 @@ import NavigationView from "./NavigationView";
 import SafetyPanel from "../ride/SafetyPanel";
 import CancelRideDialog from "../ride/CancelRideDialog";
 import RatingSheet from "../ride/RatingSheet";
+import HeadcountDialog from "./HeadcountDialog";
+import PoolOfferCard from "./PoolOfferCard";
+import TripStopList from "./TripStopList";
 
 /** Distance at which we suggest the driver mark themselves as arrived. */
 const ARRIVAL_M = 120;
 const ETA_PUSH_MS = 30000;
+/** How often to look for another booking along the route already being driven. */
+const POOL_POLL_MS = 20000;
 
 export default function DriverActiveRide() {
   useDocumentTitle("On ride");
@@ -46,6 +52,12 @@ export default function DriverActiveRide() {
   const [rateOpen, setRateOpen] = useState(false);
   const [nearPickup, setNearPickup] = useState(false);
   const [nearDestination, setNearDestination] = useState(false);
+  const [tripState, setTripState] = useState(null);
+  const [offer, setOffer] = useState(null);
+  const [offerBusy, setOfferBusy] = useState(false);
+  const [dismissed, setDismissed] = useState(() => new Set());
+  const [headcountOpen, setHeadcountOpen] = useState(false);
+  const [pendingOtp, setPendingOtp] = useState("");
 
   const publisherRef = useRef(null);
   const lastEtaPush = useRef(0);
@@ -130,6 +142,74 @@ export default function DriverActiveRide() {
     }
   }, [ride, navigate]);
 
+  // ── the whole trip, not just this booking ────────────────────────────────
+  // A pooled vehicle carries several bookings at once, so the driver screen
+  // needs the vehicle's seat state and full stop order — `useRideLive` only
+  // ever knows about the one ride in the URL.
+  const refreshTrip = useCallback(async () => {
+    const { data } = await driverTripState();
+    setTripState(data ?? null);
+  }, []);
+
+  useEffect(() => {
+    refreshTrip();
+  }, [refreshTrip, ride?.status]);
+
+  // ── offers along the current route ───────────────────────────────────────
+  const seatsFree = tripState?.seats_available ?? 0;
+  const poolOpen = ride?.status === "ongoing" && seatsFree > 0;
+
+  useEffect(() => {
+    if (!poolOpen) {
+      setOffer(null);
+      return undefined;
+    }
+    let active = true;
+    const look = async () => {
+      const { data } = await poolableRides(3);
+      if (!active) return;
+      const next = (data ?? []).find((o) => !dismissed.has(o.ride_id));
+      setOffer(next ?? null);
+    };
+    look();
+    const timer = setInterval(look, POOL_POLL_MS);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, [poolOpen, dismissed]);
+
+  const handleAcceptOffer = async (candidate) => {
+    setOfferBusy(true);
+    const { data, error: err } = await acceptPooledRide(candidate.ride_id);
+    setOfferBusy(false);
+    // The offer was priced from a read; the server re-checks seats, corridor
+    // and detour under a lock, so a refusal here is normal, not a fault.
+    if (err) {
+      toast.error(err.message || "That ride is no longer available.");
+      setOffer(null);
+      return;
+    }
+    if (!data) {
+      toast("Another driver got there first.");
+      setOffer(null);
+      return;
+    }
+    setOffer(null);
+    await refreshTrip();
+    // The rider's id comes from the accepted row, not the offer: an offer
+    // deliberately carries only what the driver needs to decide, so a request
+    // they never take does not hand them an identity.
+    notifyUser({
+      userId: data.rider_id,
+      title: "Driver found — you're sharing",
+      body: "Your driver is already on the road and heading your way.",
+      url: `/rider/ride/${candidate.ride_id}`,
+      type: "ride_accepted",
+    });
+    toast.success(`${candidate.rider_name} added to this trip`);
+  };
+
   // ── actions ───────────────────────────────────────────────────────────────
   const handleArrived = async () => {
     setBusy(true);
@@ -149,21 +229,41 @@ export default function DriverActiveRide() {
     toast.success("Rider notified that you've arrived");
   };
 
-  const handleStart = async (e) => {
+  // The OTP is checked and the headcount recorded in one server call, so the
+  // code is held here until the driver has said how many people got in.
+  const handleStart = (e) => {
     e.preventDefault();
     setOtpError("");
+    setPendingOtp(otp);
+    setHeadcountOpen(true);
+  };
+
+  const handleConfirmHeadcount = async (headcount) => {
     setBusy(true);
-    const { data: ok, error: err } = await startRide(rideId, otp);
+    const { data, error: err } = await startRide(rideId, pendingOtp, headcount);
     setBusy(false);
     if (err) {
+      setHeadcountOpen(false);
       setOtpError("Couldn't verify the code. Please try again.");
       return;
     }
-    if (!ok) {
+    if (!data?.ok) {
+      setHeadcountOpen(false);
       setOtpError("That code doesn't match. Ask the rider to read it again.");
       return;
     }
+    setHeadcountOpen(false);
     setOtp("");
+    setPendingOtp("");
+    await refreshTrip();
+
+    // More bodies than booked can leave an already-accepted booking without a
+    // seat. That rider goes back to dispatch free of charge rather than being
+    // left at a kerb, and the driver is told why their next stop vanished.
+    if (data.displacedRideId) {
+      toast.warning("The extra passenger left no room for your next pickup — we're re-matching them.");
+    }
+
     notifyUser({
       userId: ride.rider_id,
       title: "Your ride has started",
@@ -171,7 +271,7 @@ export default function DriverActiveRide() {
       url: `/rider/ride/${rideId}`,
       type: "ride_started",
     });
-    toast.success("Trip started");
+    toast.success(`Trip started · ${headcount} passenger${headcount > 1 ? "s" : ""}`);
   };
 
   const handleComplete = async () => {
@@ -194,6 +294,17 @@ export default function DriverActiveRide() {
       type: "ride_completed",
     });
     toast.success(`Trip completed · ${formatCurrency(data?.final_fare ?? ride.fare)}`);
+
+    // Dropping one rider must not end the journey for the others: if anyone is
+    // still aboard, send the driver on to the next stop instead of the summary.
+    const { data: next } = await driverTripState();
+    setTripState(next ?? null);
+    const remaining = (next?.rides ?? []).filter((r) => r.id !== rideId);
+    if (remaining.length > 0) {
+      completedHandled.current = true;
+      toast.info(`Still carrying ${remaining[0].rider_name} — heading to the next stop.`);
+      navigate(`/driver/ride/${remaining[0].id}`, { replace: true });
+    }
   };
 
   // ── render ────────────────────────────────────────────────────────────────
@@ -322,6 +433,30 @@ export default function DriverActiveRide() {
           </Card>
         )}
 
+        {/* Another booking along the road we're already on */}
+        {poolOpen && offer && (
+          <div className="mt-4">
+            <PoolOfferCard
+              offer={offer}
+              busy={offerBusy}
+              onAccept={handleAcceptOffer}
+              onDismiss={() =>
+                setDismissed((prev) => new Set(prev).add(offer.ride_id))
+              }
+            />
+          </div>
+        )}
+
+        {/* The full schedule, once there is more than one booking aboard */}
+        {tripState?.stops?.length > 2 && (
+          <div className="mt-4">
+            <TripStopList
+              stops={tripState.stops}
+              seatCapacity={tripState.trip?.seat_capacity}
+            />
+          </div>
+        )}
+
         {/* Arrived → OTP */}
         {ride.status === "arrived" && (
           <Card className="mt-4 p-4">
@@ -421,6 +556,15 @@ export default function DriverActiveRide() {
           />
         </div>
       </RideSheet>
+
+      <HeadcountDialog
+        open={headcountOpen}
+        onClose={() => setHeadcountOpen(false)}
+        ride={{ ...ride, rider_name: rider?.name }}
+        seatsFree={seatsFree}
+        busy={busy}
+        onConfirm={handleConfirmHeadcount}
+      />
 
       <CancelRideDialog
         open={cancelOpen}

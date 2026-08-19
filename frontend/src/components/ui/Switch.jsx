@@ -28,7 +28,10 @@ export default function Switch({ checked, onChange, label, description, disabled
         <span
           aria-hidden="true"
           className={cn(
-            "absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform",
+            // `left-0` matters: without it the thumb is positioned from its static
+// position rather than the track, so the "on" state pushed the knob
+// clear outside the pill on every switch in the app.
+            "absolute left-0 top-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform",
             checked ? "translate-x-[22px]" : "translate-x-0.5"
           )}
         />

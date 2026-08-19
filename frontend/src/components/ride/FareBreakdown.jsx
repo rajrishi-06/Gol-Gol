@@ -63,11 +63,29 @@ export default function FareBreakdown({ ride, payment, title = "Fare breakdown" 
             {Number(payment.tip_amount) > 0 && (
               <Row label="Tip" value={formatCurrency(payment.tip_amount)} />
             )}
+            {/* The fare settles on the headcount that actually travelled, so
+                the receipt has to say when that differed from the booking. */}
+            {Number(ride.seat_surcharge) > 0 && (
+              <Row
+                label={`${ride.seats_occupied ?? ride.seats} passengers`}
+                value={`incl. ${formatCurrency(ride.seat_surcharge)}`}
+                muted
+              />
+            )}
+            {Number(ride.pool_discount) > 0 && (
+              <Row
+                label="Sharing rebate"
+                value={`−${formatCurrency(ride.pool_discount)}`}
+              />
+            )}
           </>
         ) : (
           <>
             <Row label="Estimated fare" value={formatCurrency(ride.fare)} />
             <Row label="Distance" value={formatDistance(ride.distance_km)} muted />
+            {ride.seats > 1 && (
+              <Row label="Seats booked" value={String(ride.seats)} muted />
+            )}
           </>
         )}
       </dl>

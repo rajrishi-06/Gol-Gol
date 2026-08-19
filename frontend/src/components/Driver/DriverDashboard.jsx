@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { MapPin, Route as RouteIcon, Inbox, Moon, Star, Navigation, AlertTriangle } from "lucide-react";
+import { MapPin, Route as RouteIcon, Inbox, Moon, Star, Navigation, AlertTriangle, Users } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../lib/auth.jsx";
@@ -136,13 +136,21 @@ function RideRequestCard({ ride, onAccept, isAccepting }) {
         </p>
       )}
 
-      <div className="mt-3 flex items-center gap-3 text-xs text-muted">
+      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-muted">
         <span className="inline-flex items-center gap-1.5">
           <RouteIcon className="h-3.5 w-3.5" /> {formatDistance(ride.distance_km)} trip
         </span>
         <span className="inline-flex items-center gap-1.5">
           <MapPin className="h-3.5 w-3.5" /> {formatDistance(ride.pickup_distance_km)} to pickup
         </span>
+        {ride.seats > 1 && (
+          <span className="inline-flex items-center gap-1.5">
+            <Users className="h-3.5 w-3.5" /> {ride.seats} seats
+          </span>
+        )}
+        {/* Worth surfacing before the accept: a shareable booking is the one
+            that can pick up a second fare along the way. */}
+        {ride.shareable && <Badge tone="brand">Shareable</Badge>}
       </div>
 
       <Button fullWidth className="mt-4" loading={isAccepting} onClick={() => onAccept(ride.id)}>

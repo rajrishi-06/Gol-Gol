@@ -23,6 +23,8 @@ const EMPTY = {
   paymentMethod: "cash",
   pickupNotes: "",
   vehicleType: null,
+  seats: 1,
+  shareable: true,
 };
 
 // The carpool a rider is previewing on the map. Kept out of the persisted trip

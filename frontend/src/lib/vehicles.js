@@ -81,6 +81,21 @@ export function estimateFare(rideId, distance) {
   };
 }
 
+/**
+ * Classes that can carry two bookings at once.
+ *
+ * A bike carries exactly one passenger, so this is a property of the class
+ * rather than an arithmetic outcome of `seats === 1` — the same reason
+ * `vehicle_classes.allows_concurrent_pool` is a column in the database and not
+ * a derived value. Bikes still benefit from the other half of pooling:
+ * accepting the next fare before finishing the current one.
+ */
+export const POOLABLE_CLASSES = RIDE_TYPES.filter((r) => r.seats > 1).map((r) => r.id);
+
+export function allowsPooling(rideId) {
+  return POOLABLE_CLASSES.includes(rideId);
+}
+
 /** Vehicle body types a driver can register. */
 export const DRIVER_VEHICLE_TYPES = ["car", "bike", "auto", "van", "truck"];
 

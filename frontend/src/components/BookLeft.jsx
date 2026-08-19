@@ -6,6 +6,7 @@ import { supabase } from "../lib/supabase";
 import { useAuth } from "../lib/auth.jsx";
 import { useBooking } from "../lib/booking.jsx";
 import { cancelRide, createRide, expireStaleRides } from "../lib/rides";
+import { canShare, fareForSeats, maxSeatsFor } from "../lib/pooling";
 import { distanceKm, hasValidCoords } from "../lib/geo";
 import { reverseGeocode } from "../lib/geocoding";
 import { estimateFare, getRideType } from "../lib/vehicles";
@@ -15,6 +16,7 @@ import Card from "./ui/Card";
 import EmptyState from "./ui/EmptyState";
 import { Textarea } from "./ui/Field";
 import PaymentMethodPicker from "./ride/PaymentMethodPicker";
+import SeatPicker from "./ride/SeatPicker";
 
 /** How long we hunt for a driver before calling it. */
 const SEARCH_TIMEOUT_MS = 3 * 60 * 1000;
@@ -77,6 +79,11 @@ export default function BookLeft() {
   const [method, setMethod] = useState(
     trip.paymentMethod || settings?.default_payment_method || "cash"
   );
+  const [seats, setSeats] = useState(trip.seats || 1);
+  // Defaulted on: pooling only works with liquid supply, and the rider gives
+  // up nothing by leaving it on — the rebate is paid on match, and a ride that
+  // never matches is the ride they booked.
+  const [shareable, setShareable] = useState(trip.shareable ?? true);
 
   const [phase, setPhase] = useState("review"); // review | searching | scheduled | nodrivers
   const [rideId, setRideId] = useState(null);
@@ -88,6 +95,13 @@ export default function BookLeft() {
   const routeReady = hasValidCoords(trip.fromCords) && hasValidCoords(trip.toCords);
   const distance = routeReady ? distanceKm(trip.fromCords, trip.toCords) : 0;
   const fare = ride ? estimateFare(ride.id, distance) : null;
+
+  // A bike carries one passenger and never shares, so switching class has to
+  // pull both back into range rather than leaving a stale 3 seats behind.
+  const capacity = ride ? maxSeatsFor(ride.id) : 1;
+  const effectiveSeats = Math.min(seats, capacity);
+  const effectiveShare = shareable && canShare(ride?.id);
+  const total = fare ? fareForSeats(fare.total, effectiveSeats) : 0;
 
   // Fill in any address the user didn't type (they may have dropped a pin).
   useEffect(() => {
@@ -160,7 +174,12 @@ export default function BookLeft() {
   const confirm = async () => {
     if (!routeReady || !ride) return;
     setBusy(true);
-    trip.patch({ paymentMethod: method, pickupNotes: notes });
+    trip.patch({
+      paymentMethod: method,
+      pickupNotes: notes,
+      seats: effectiveSeats,
+      shareable: effectiveShare,
+    });
 
     const { data, error } = await createRide({
       riderId: userId,
@@ -172,6 +191,8 @@ export default function BookLeft() {
       paymentMethod: method,
       pickupNotes: notes.trim() || null,
       scheduledFor: trip.scheduledFor,
+      seats: effectiveSeats,
+      shareable: effectiveShare,
     });
     setBusy(false);
 
@@ -334,6 +355,19 @@ export default function BookLeft() {
           />
         </Card>
 
+        {/* Who's travelling */}
+        <Card className="mt-4 p-4">
+          <h3 className="mb-3 text-sm font-semibold text-foreground">Who&apos;s travelling</h3>
+          <SeatPicker
+            vehicleType={ride.id}
+            seats={effectiveSeats}
+            onSeatsChange={setSeats}
+            shareable={effectiveShare}
+            onShareableChange={setShareable}
+            oneSeatFare={fare.total}
+          />
+        </Card>
+
         {/* Payment */}
         <Card className="mt-4 p-4">
           <h3 className="text-sm font-semibold text-foreground">Payment</h3>
@@ -359,9 +393,26 @@ export default function BookLeft() {
               <dd>{formatDistance(distance)}</dd>
             </div>
           </dl>
+          {effectiveSeats > 1 && (
+            <dl className="mt-2 space-y-2 text-sm">
+              <div className="flex justify-between">
+                <dt className="text-muted">
+                  {effectiveSeats - 1} extra seat{effectiveSeats > 2 ? "s" : ""}
+                </dt>
+                <dd className="font-medium text-foreground">
+                  {formatCurrency(total - fare.total)}
+                </dd>
+              </div>
+            </dl>
+          )}
+          {effectiveShare && (
+            <p className="mt-2 text-xs text-primary">
+              Sharing: up to 20% back if we match you with another rider.
+            </p>
+          )}
           <div className="mt-3 flex items-center justify-between border-t border-border pt-3">
             <span className="font-semibold text-foreground">Estimated total</span>
-            <span className="text-lg font-bold text-foreground">{formatCurrency(fare.total)}</span>
+            <span className="text-lg font-bold text-foreground">{formatCurrency(total)}</span>
           </div>
           <p className="mt-2 text-center text-xs text-subtle">
             The server recalculates this when you book — waiting time and tolls may apply.
@@ -370,7 +421,7 @@ export default function BookLeft() {
 
         <div className="mt-auto space-y-2 pt-6">
           <Button fullWidth size="lg" loading={busy} onClick={confirm}>
-            {trip.scheduledFor ? "Schedule ride" : "Confirm booking"} · {formatCurrency(fare.total)}
+            {trip.scheduledFor ? "Schedule ride" : "Confirm booking"} · {formatCurrency(total)}
           </Button>
           <Button variant="ghost" fullWidth onClick={() => navigate("/")}>
             Back

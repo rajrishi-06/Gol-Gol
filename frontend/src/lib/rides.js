@@ -28,6 +28,8 @@ export async function createRide({
   paymentMethod = "cash",
   pickupNotes = null,
   scheduledFor = null,
+  seats = 1,
+  shareable = false,
 }) {
   return supabase
     .from("rides")
@@ -43,6 +45,8 @@ export async function createRide({
       payment_method: paymentMethod,
       pickup_notes: pickupNotes,
       scheduled_for: scheduledFor,
+      seats,
+      shareable,
       status: "pending",
     })
     .select()
@@ -56,7 +60,25 @@ export const acceptRide = (rideId) => rpc("accept_ride", { p_ride_id: rideId });
 
 export const markArrived = (rideId) => rpc("mark_driver_arrived", { p_ride_id: rideId });
 
-export const startRide = (rideId, otp) => rpc("start_ride", { p_ride_id: rideId, p_otp: otp });
+/**
+ * Verify the OTP and start the booking, recording how many people actually got
+ * in. The headcount is what the fare settles on — `seats` was only ever what
+ * the rider expected to need.
+ *
+ * Resolves to `{ ok, displaced_ride_id }`: a non-null `displaced_ride_id` means
+ * the extra passengers pushed an already-accepted booking out of the vehicle
+ * and that rider has been returned to dispatch.
+ */
+export const startRide = async (rideId, otp, headcount = null) => {
+  const { data, error } = await rpc("start_ride", {
+    p_ride_id: rideId,
+    p_otp: otp,
+    p_headcount: headcount,
+  });
+  if (error) return { data: null, error };
+  const row = Array.isArray(data) ? data[0] : data;
+  return { data: { ok: Boolean(row?.ok), displacedRideId: row?.displaced_ride_id ?? null }, error: null };
+};
 
 export const completeRide = (rideId, waitingMinutes = 0) =>
   rpc("complete_ride", { p_ride_id: rideId, p_waiting_minutes: Math.max(0, Math.round(waitingMinutes)) });

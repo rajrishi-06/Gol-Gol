@@ -1,9 +1,30 @@
 # Pooling, unified roles and adaptive capacity — architecture spec
 
-**Status:** proposal. Nothing in this document is implemented.
-**Companion:** a narrative version of this plan, with diagrams, is published as an
-artifact for review. This file is the implementable form: exact DDL, RPC
-signatures, index definitions and the codebase touch points for each phase.
+**Status:** phases P1, P3 and P4 are **implemented** in
+`supabase/migrations/0007_pooling.sql` and the frontend. P0 (unified rider/driver
+mode), P2 (sequential chaining) and P5 (batch matching) are still proposals.
+**Companion:** a narrative version of this plan, with diagrams, is published as
+an artifact for review.
+
+Where the shipped implementation departs from the plan below, the plan text has
+been corrected and the change noted inline. Three departures are worth reading
+before the rest:
+
+1. **No PostGIS.** The corridor test is plane trigonometry over the polyline of
+   remaining stops (`path_locate`, `stop_progress`, `path_added_km`), so it runs
+   on a stock Postgres and needs no extension enabled on the project. The whole
+   thing is therefore testable outside Supabase — `supabase/tests/run.sh` applies
+   every migration to a throwaway database and asserts the flow end to end.
+   Swapping in `geography(LineString)` + GiST later touches only those three
+   functions.
+2. **Stops are ordered by progress along the route, not by an O(n²) insertion
+   search.** Every stop projects onto the remaining path; sorting by that
+   projection gives pickup-before-drop for free, guarantees no stop lands behind
+   one already passed, and puts a second rider travelling further than the first
+   after their drop — which is the case this feature exists for.
+3. **Seats available is summed per booking**, not derived from the trip's two
+   counters. See §4 — the counter form oversells the vehicle, and a real test
+   caught it.
 
 This spec covers three things the product wants to add on top of what exists
 today:
@@ -244,12 +265,31 @@ create or replace function public.trip_assert_capacity(p_trip uuid) returns void
 raises if any prefix exceeds `seat_capacity`. It is called inside every RPC that
 mutates a sequence, under the trip's row lock.
 
-### 2.4 PostGIS
+### 2.4 Geometry, without PostGIS
 
-PostGIS is not currently enabled. Phase 2 adds `create extension if not exists
-postgis;`. Until then `haversine_km()` (`0003`) stays the distance function for
-the existing radius dispatch — the corridor query is the first thing that
-genuinely needs geography types.
+**Shipped differently from the original plan.** The corridor test needs three
+things — how far a point sits off a route, how far along it, and what inserting
+two points costs — and all three are plane trigonometry at city scale:
+
+| Function | Returns |
+|---|---|
+| `point_segment_km(p, a, b)` | distance from P to segment AB, and where along AB it lands |
+| `path_locate(lats, lngs, p)` | `along_km`, `offset_km`, `total_km` against a polyline |
+| `stop_progress(lats, lngs, p)` | `along_km`, plus the overshoot when a point lies past the route's end |
+| `path_added_km(path, pickup, drop)` | how much longer the route becomes with both inserted |
+
+`path_locate` clamps projections to the path, so every point *beyond* the end
+returns the same `along_km` and would tie. `stop_progress` adds the straight-line
+distance past the end in that case, which is what orders a second rider's drop
+after the first's.
+
+Straight-line distance under-estimates road distance, which would let a detour
+slip past its cap, so every added-distance figure is scaled by
+`pool_config.road_factor` (default 1.3) before it is compared against a limit.
+
+The equirectangular projection this rests on is exact enough over a single
+trip — a degree of longitude changes by well under a percent across any city —
+and the error is in the conservative direction for the corridor test.
 
 ---
 
@@ -308,8 +348,22 @@ arrives with a friend; a rider books three to have the auto to themselves and
 travels alone; someone no-shows. Match against the conservative figure:
 
 ```
-seats_available = seat_capacity − greatest(seats_booked, seats_occupied) − seats_on_hold
+committed(booking) = greatest(booking.seats, coalesce(booking.seats_occupied, booking.seats))
+seats_available    = seat_capacity − Σ committed(live bookings)
 ```
+
+**Corrected from the original plan**, which said
+`seat_capacity − greatest(seats_booked, seats_occupied)`. That form only holds
+when every booking is in the same state: with one rider aboard occupying two
+seats and another merely booked for one, it reads 2 where the true commitment is
+3, and the vehicle gets oversold. A test caught it — see
+`supabase/tests/02_pooling_flow.sql`.
+
+The same correction applies to the capacity walk. `trip_assert_capacity` seeds
+its running total with whoever is already aboard, because their pickup stop is
+marked reached and contributes no `+delta` to the walk while their drop still
+subtracts — starting from zero drives the total negative and hides a genuine
+overflow mid-route.
 
 | Class | Passenger seats | Concurrent pooling | Sequential chaining |
 |---|---:|---|---|
@@ -622,14 +676,14 @@ pass once the shape is agreed. The rules it has to satisfy:
 Ordered so the risky migration lands while nothing depends on it, and so
 something useful ships at every step rather than after all of it.
 
-### P0 — Unified role & mode
+### P0 — Unified role & mode — not yet built
 One session state per user with the mutual-exclusion invariant in the database;
 the header switch becomes a real transition. No pooling yet.
 *De-risks: nothing else is safe to build until "driving while riding" is impossible.*
 Touches: `user_modes` DDL, `set_user_mode`/`assert_can_*`, `src/lib/auth.jsx`,
 `src/components/layout/TopBar.jsx`, `src/components/layout/navItems.js`.
 
-### P1 — Trips, bookings, stops
+### P1 — Trips, bookings, stops ✅ shipped
 Introduce the model; backfill one trip and two stops per existing ride; route
 everything through the stop sequence. Behaviour identical, capacity fixed at 1.
 Keep `rides.driver_id` as a synced mirror so existing queries, RLS and realtime
@@ -639,7 +693,7 @@ Touches: `trips`/`trip_stops`/`vehicle_classes` DDL + backfill, `accept_ride`,
 `start_ride`, `complete_ride`, `cancel_ride` rewritten against trips,
 `src/lib/rides.js`, `src/lib/activeRide.jsx`, `src/lib/useRideLive.js`.
 
-### P2 — Sequential chaining
+### P2 — Sequential chaining — not yet built
 A driver accepts the *next* fare while finishing the current one. No concurrency,
 no capacity maths, no detour. **Works for bikes.**
 *Delivers the "faster pickups" value immediately and exercises the stop-sequence
@@ -647,7 +701,7 @@ code with almost none of the risk.*
 Touches: `nearby_pending_rides` gains a "finishing soon" branch;
 `src/components/Driver/*` offer card.
 
-### P3 — Concurrent pooling
+### P3 — Concurrent pooling ✅ shipped
 PostGIS, the corridor index, insertion feasibility, the `shareable` flag, the
 detour promise, the driver offer card. Auto, mini, sedan, SUV.
 *The feature proper — but every dependency is already load-bearing by now.*
@@ -655,14 +709,14 @@ Touches: `postgis`, `find_pool_matches()`, `accept_pooled_booking()`,
 `seat_holds`, booking UI in `src/components/AvailableRides.jsx` and
 `src/lib/booking.jsx`, offer card in `src/components/Driver/`.
 
-### P4 — Adaptive occupancy
+### P4 — Adaptive occupancy ✅ shipped
 Headcount confirmation at each pickup, live seat availability, charging for extra
 occupants, and the proactive re-dispatch of §4.4.
 *Split from P3 deliberately so P3 can ship on booked seats alone.*
 Touches: `occupancy_events`, `confirm_pickup_headcount`,
 `confirm_extra_occupant`, `amend_booking_seats`, driver pickup screen.
 
-### P5 — Batch matching & tuning
+### P5 — Batch matching & tuning — not yet built
 Hold requests in a short window and solve jointly; per-city scoring weights;
 interaction with surge.
 *Only pays off at volume.*
@@ -707,3 +761,58 @@ but they are calls for the product owner, not for engineering.
 6. **Launch geography** — one corridor in one city, or citywide?
    → *One high-density corridor first.* A citywide launch at low volume produces
    a match rate near zero and reads as a broken feature.
+
+
+---
+
+## 14. What shipped, and how to run it
+
+```
+supabase/migrations/0007_pooling.sql   the whole database layer
+supabase/tests/run.sh                  applies every migration, runs 27 assertions
+frontend/src/lib/pooling.js            RPC wrappers + local previews of the arithmetic
+frontend/src/components/ride/SeatPicker.jsx        seats + the sharing consent gate
+frontend/src/components/ride/SharedRideBanner.jsx  what the rider is told
+frontend/src/components/Driver/HeadcountDialog.jsx how many actually got in
+frontend/src/components/Driver/PoolOfferCard.jsx   the marginal case, for the driver
+frontend/src/components/Driver/TripStopList.jsx    the schedule, with running occupancy
+```
+
+Run the database suite with a local Postgres:
+
+```
+sudo ./supabase/tests/run.sh
+```
+
+It applies `0001` through `0007` to a throwaway database and asserts: the
+booking and accept path; the headcount repricing a fare; every refusal (wrong
+way, off corridor, no consent, no seats, pickup too far ahead); a second rider
+travelling past the first; the trip surviving the first drop; displacement when
+occupancy grows; and a two-session race for the last seat.
+
+### Configuration
+
+Everything tunable lives in one row of `pool_config`, so a city can be retuned
+without a deploy:
+
+| Column | Default | What it does |
+|---|---:|---|
+| `corridor_km` | 1.2 | how far off-route a stop may sit |
+| `max_extension_km` | 3.0 | how far past the last drop a new drop may go |
+| `max_detour_min` | 8 | added-time cap for riders already aboard |
+| `max_pickup_wait_min` | 12 | how long a new rider may wait for a pooled car |
+| `avg_speed_kmh` | 22 | km → minutes |
+| `road_factor` | 1.3 | straight-line → road distance |
+| `extra_seat_pct` | 40 | each seat past the first, as a share of the one-seat fare |
+| `pool_discount_pct` | 20 | rebate, paid only when a match lands |
+
+### Still open
+
+- **Seat holds.** An outstanding offer does not yet reserve its seat, so a
+  driver can be shown an offer that fails on accept. The row lock makes this
+  *correct* — never oversold — but a `seat_holds` row with a TTL would make it
+  pleasant. See §8.
+- **The detour promise is enforced but not yet audited.** `promised_detour_min`
+  is stored and capped at insertion; `actual_detour_min` is not yet computed at
+  completion, so the automatic credit on breach does not fire.
+- **P0 and P2** as above.

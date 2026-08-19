@@ -28,9 +28,11 @@ import Spinner from "../ui/Spinner";
 import RideSheet from "../RideSheet";
 import MapFallback from "../MapFallback";
 import RideStatusStepper from "../ride/RideStatusStepper";
+import { ridePoolContext } from "../../lib/pooling";
 import SafetyPanel from "../ride/SafetyPanel";
 import CancelRideDialog from "../ride/CancelRideDialog";
 import RatingSheet from "../ride/RatingSheet";
+import SharedRideBanner from "../ride/SharedRideBanner";
 
 /**
  * Live tracking map. The driver marker moves in real time, the route is redrawn
@@ -240,6 +242,22 @@ export default function RiderActiveRide() {
   const [startOtp, setStartOtp] = useState(null);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [rateOpen, setRateOpen] = useState(false);
+  const [pool, setPool] = useState(null);
+
+  // Sharing state, as a server-side projection: first name and rating only.
+  // A policy on `rides` would leak co-passengers' pickup addresses.
+  useEffect(() => {
+    if (!rideId) return;
+    let active = true;
+    (async () => {
+      const { data } = await ridePoolContext(rideId);
+      if (active) setPool(data ?? null);
+    })();
+    return () => {
+      active = false;
+    };
+  }, [rideId, ride?.status, ride?.trip_id]);
+
   const autoShared = useRef(false);
   const arrivedToast = useRef(false);
   const finished = useRef(false);
@@ -422,6 +440,12 @@ export default function RiderActiveRide() {
             />
           </div>
         </div>
+
+        {(pool?.pooled || pool?.shareable) && (
+          <div className="mt-4">
+            <SharedRideBanner context={pool} />
+          </div>
+        )}
 
         {/* Driver card */}
         <Card className="mt-4 flex items-center gap-3 p-4">
