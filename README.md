@@ -27,6 +27,9 @@ ratings, receipts, driver earnings and a safety toolkit — all from a browser.
 > **Setting it up?** `docs/IMPLEMENTATION.md` has the migration order, the admin
 > bootstrap and an end-to-end test path. `docs/FEATURE_ANALYSIS.md` is the audit
 > behind the current design.
+>
+> **Looking ahead?** `docs/POOLING_ARCHITECTURE.md` is a proposal — not built yet —
+> for unified rider/driver modes, en-route pooling and adaptive vehicle capacity.
 
 ---
 
