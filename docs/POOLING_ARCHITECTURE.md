@@ -768,8 +768,9 @@ but they are calls for the product owner, not for engineering.
 ## 14. What shipped, and how to run it
 
 ```
-supabase/migrations/0007_pooling.sql   the whole database layer
-supabase/tests/run.sh                  applies every migration, runs 27 assertions
+supabase/migrations/0007_pooling.sql   trips, stops, matching, capacity
+supabase/migrations/0008_seat_holds.sql seat holds + the detour audit
+supabase/tests/run.sh                  applies every migration, runs 54 assertions
 frontend/src/lib/pooling.js            RPC wrappers + local previews of the arithmetic
 frontend/src/components/ride/SeatPicker.jsx        seats + the sharing consent gate
 frontend/src/components/ride/SharedRideBanner.jsx  what the rider is told
@@ -784,11 +785,15 @@ Run the database suite with a local Postgres:
 sudo ./supabase/tests/run.sh
 ```
 
-It applies `0001` through `0007` to a throwaway database and asserts: the
+It applies every migration to a throwaway database — one per test file, since
+they are not written to tolerate each other's leftovers — and asserts: the
 booking and accept path; the headcount repricing a fare; every refusal (wrong
 way, off corridor, no consent, no seats, pickup too far ahead); a second rider
 travelling past the first; the trip surviving the first drop; displacement when
-occupancy grows; and a two-session race for the last seat.
+occupancy grows; a two-session race for the last seat; that a hold reserves both
+seat and request and nobody else can take either; that an expired hold frees them
+again; that a growing headcount drops holds before bookings; and that a breached
+detour promise is measured and credited.
 
 ### Configuration
 
@@ -805,14 +810,45 @@ without a deploy:
 | `road_factor` | 1.3 | straight-line → road distance |
 | `extra_seat_pct` | 40 | each seat past the first, as a share of the one-seat fare |
 | `pool_discount_pct` | 20 | rebate, paid only when a match lands |
+| `hold_seconds` | 25 | how long an offer reserves its seat and request |
+| `breach_rate_per_min` | 8 | credit per minute over the promised detour |
+| `breach_cap_pct` | 25 | ceiling on that credit, as a share of the fare |
+
+### Seat holds — shipped in `0008`
+
+An offer now reserves both the seat and the request for `pool_config.hold_seconds`
+(default 25). `hold_pool_seat` re-runs every check the accept will run, under the
+same row lock, so a card that reaches the driver's screen is one they can take.
+
+- Held seats are netted out of `trip_seats_available`, with `p_except_ride` so a
+  driver's own hold never locks them out of their own accept.
+- `poolable_rides`, `nearby_pending_rides` and `accept_ride` all skip a request
+  another driver is holding — otherwise a driver on the dashboard could take the
+  ride out from under one mid-decision.
+- Holds expire lazily on every read path as well as by `expire_seat_holds()`, so
+  no caller has to reason about whether a sweeper has run.
+- When a headcount fills the vehicle, **holds are dropped before bookings are
+  displaced**: nobody has been promised anything by a hold, so withdrawing one
+  costs a driver a decision, where displacing a booking costs a rider their ride.
+
+The lock still does the real work. A hold makes failure rare; it does not make
+the recheck optional, because occupancy can still grow underneath it.
+
+### The detour promise — shipped in `0008`
+
+`solo_eta_min` is stored at booking, and completion measures what the detour
+actually cost. Over the promise, the rider is credited automatically — at
+`breach_rate_per_min` (₹8) capped at `breach_cap_pct` (25%) of the fare — with a
+notification and a `ride_events` entry. No support ticket: a guarantee that needs
+chasing is not a guarantee.
+
+**Measured from the stops actually driven, not from wall-clock time.** Wall-clock
+would charge us for traffic we did not cause and would breach on nearly every
+trip in a city, which makes the guarantee meaningless in the direction that costs
+money. `ride_actual_detour_min` walks the stop sequence between the rider's
+pickup and drop, subtracts their direct distance, and converts with the same
+`road_factor` the promise was quoted with.
 
 ### Still open
 
-- **Seat holds.** An outstanding offer does not yet reserve its seat, so a
-  driver can be shown an offer that fails on accept. The row lock makes this
-  *correct* — never oversold — but a `seat_holds` row with a TTL would make it
-  pleasant. See §8.
-- **The detour promise is enforced but not yet audited.** `promised_detour_min`
-  is stored and capped at insertion; `actual_detour_min` is not yet computed at
-  completion, so the automatic credit on breach does not fire.
 - **P0 and P2** as above.

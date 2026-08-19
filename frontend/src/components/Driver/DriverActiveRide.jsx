@@ -7,7 +7,13 @@ import { useAuth } from "../../lib/auth.jsx";
 import { useRideLive } from "../../lib/useRideLive";
 import { useDriverPresence } from "../../lib/useDriverPresence";
 import { completeRide, markArrived, startRide, updateRideEta } from "../../lib/rides";
-import { acceptPooledRide, driverTripState, poolableRides } from "../../lib/pooling";
+import {
+  acceptPooledRide,
+  driverTripState,
+  holdPoolSeat,
+  poolableRides,
+  releaseSeatHold,
+} from "../../lib/pooling";
 import { distanceKm } from "../../lib/geo";
 import { notifyUser } from "../../lib/notify";
 import { publishRideLocation } from "../../lib/liveLocation";
@@ -54,11 +60,13 @@ export default function DriverActiveRide() {
   const [nearDestination, setNearDestination] = useState(false);
   const [tripState, setTripState] = useState(null);
   const [offer, setOffer] = useState(null);
+  const [offerLeft, setOfferLeft] = useState(null);
   const [offerBusy, setOfferBusy] = useState(false);
   const [dismissed, setDismissed] = useState(() => new Set());
   const [headcountOpen, setHeadcountOpen] = useState(false);
   const [pendingOtp, setPendingOtp] = useState("");
 
+  const heldRef = useRef(null);
   const publisherRef = useRef(null);
   const lastEtaPush = useRef(0);
   const arrivalSpoken = useRef(false);
@@ -159,30 +167,80 @@ export default function DriverActiveRide() {
   const seatsFree = tripState?.seats_available ?? 0;
   const poolOpen = ride?.status === "ongoing" && seatsFree > 0;
 
+  // Release whatever we are holding, wherever we leave from.
+  const dropHold = useCallback(async () => {
+    const held = heldRef.current;
+    heldRef.current = null;
+    setOfferLeft(null);
+    if (held) await releaseSeatHold(held);
+  }, []);
+
   useEffect(() => {
     if (!poolOpen) {
       setOffer(null);
+      dropHold();
       return undefined;
     }
     let active = true;
+
     const look = async () => {
+      // Don't go looking while the driver is deciding on one.
+      if (heldRef.current) return;
       const { data } = await poolableRides(3);
       if (!active) return;
       const next = (data ?? []).find((o) => !dismissed.has(o.ride_id));
-      setOffer(next ?? null);
+      if (!next) {
+        setOffer(null);
+        return;
+      }
+      // Reserve it before showing it, so the card the driver sees is one they
+      // can actually take. Losing the reservation is how a race is lost, and
+      // it means we simply never showed the offer.
+      const { data: hold } = await holdPoolSeat(next.ride_id);
+      if (!active) {
+        if (hold) releaseSeatHold(next.ride_id);
+        return;
+      }
+      if (!hold) {
+        setDismissed((prev) => new Set(prev).add(next.ride_id));
+        return;
+      }
+      heldRef.current = next.ride_id;
+      setOffer(next);
+      setOfferLeft(Math.max(0, Math.round((new Date(hold.expiresAt) - Date.now()) / 1000)));
     };
+
     look();
     const timer = setInterval(look, POOL_POLL_MS);
     return () => {
       active = false;
       clearInterval(timer);
     };
-  }, [poolOpen, dismissed]);
+  }, [poolOpen, dismissed, dropHold]);
+
+  // Countdown; when it runs out the hold has lapsed server-side too, so the
+  // card goes away rather than lying about being available.
+  useEffect(() => {
+    if (offerLeft == null) return undefined;
+    if (offerLeft <= 0) {
+      setOffer(null);
+      heldRef.current = null;
+      setOfferLeft(null);
+      return undefined;
+    }
+    const t = setTimeout(() => setOfferLeft((n) => (n == null ? null : n - 1)), 1000);
+    return () => clearTimeout(t);
+  }, [offerLeft]);
+
+  // Leaving the screen must not strand a seat for the rest of the TTL.
+  useEffect(() => () => { if (heldRef.current) releaseSeatHold(heldRef.current); }, []);
 
   const handleAcceptOffer = async (candidate) => {
     setOfferBusy(true);
     const { data, error: err } = await acceptPooledRide(candidate.ride_id);
     setOfferBusy(false);
+    heldRef.current = null;      // consumed by the accept, or already gone
+    setOfferLeft(null);
     // The offer was priced from a read; the server re-checks seats, corridor
     // and detour under a lock, so a refusal here is normal, not a fault.
     if (err) {
@@ -440,9 +498,12 @@ export default function DriverActiveRide() {
               offer={offer}
               busy={offerBusy}
               onAccept={handleAcceptOffer}
-              onDismiss={() =>
-                setDismissed((prev) => new Set(prev).add(offer.ride_id))
-              }
+              secondsLeft={offerLeft}
+              onDismiss={() => {
+                dropHold();
+                setDismissed((prev) => new Set(prev).add(offer.ride_id));
+                setOffer(null);
+              }}
             />
           </div>
         )}

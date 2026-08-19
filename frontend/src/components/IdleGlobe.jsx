@@ -1,148 +1,131 @@
-import { ShieldCheck, Sparkles } from "lucide-react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { ShieldCheck, Sparkles, Globe2 } from "lucide-react";
+import { createGlobe, GLOBE_PALETTE } from "../lib/globe";
+import { useMediaQuery } from "../lib/useMediaQuery";
 
-// Sphere wireframe, computed once. Latitude rings flatten toward the poles;
-// longitude arcs narrow toward the limb — reads as a globe head-on.
-const CX = 170;
-const CY = 170;
-const R = 150;
+/**
+ * The idle half of the home screen: Earth from orbit, turning.
+ *
+ * It is not decoration. Choosing a pickup starts here — the globe flies to the
+ * coordinate and descends to it, and only then does the map take over. That
+ * hand-off is why this exposes an imperative `diveTo`: the parent needs the
+ * descent to finish before it swaps in the picker, or the transition cuts.
+ *
+ * Falls back to a static panel wherever WebGL2 is missing.
+ */
+const IdleGlobe = forwardRef(function IdleGlobe({ onDiveEnd }, ref) {
+  const canvasRef = useRef(null);
+  const globeRef = useRef(null);
+  const [failed, setFailed] = useState(false);
+  const [diving, setDiving] = useState(false);
+  const reduced = useMediaQuery("(prefers-reduced-motion: reduce)");
 
-const LATITUDES = [
-  { dy: 0, ry: 46 },
-  { dy: 44, ry: 32 },
-  { dy: 84, ry: 20 },
-  { dy: 118, ry: 11 },
-].flatMap(({ dy, ry }) => {
-  const rx = Math.sqrt(R * R - dy * dy);
-  return dy === 0
-    ? [{ cy: CY, rx, ry }]
-    : [
-        { cy: CY - dy, rx, ry },
-        { cy: CY + dy, rx, ry },
-      ];
-});
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return undefined;
 
-const LONGITUDES = [150, 120, 80, 34]; // rx of each meridian ellipse (ry = R)
+    const dark = document.documentElement.getAttribute("data-theme") === "dark";
+    const globe = createGlobe(canvas, {
+      texture: "/earth.png",
+      palette: dark ? GLOBE_PALETTE.dark : GLOBE_PALETTE.light,
+      reducedMotion: reduced,
+      onFail: () => setFailed(true),
+    });
+    globeRef.current = globe;
+    if (!globe) return undefined;
 
-// Orbiting dots: [tiltDeg, ringRx, flattenY, durationS, reverse]
-const ORBITS = [
-  { tilt: -18, rx: 196, flat: 0.36, dur: 15, rev: false },
-  { tilt: 14, rx: 214, flat: 0.28, dur: 23, rev: true },
-];
+    // Follow the app's theme without tearing the canvas down and back up.
+    const themeWatch = new MutationObserver(() => {
+      const isDark = document.documentElement.getAttribute("data-theme") === "dark";
+      globe.setPalette(isDark ? GLOBE_PALETTE.dark : GLOBE_PALETTE.light);
+    });
+    themeWatch.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
 
-export default function IdleGlobe() {
+    return () => {
+      themeWatch.disconnect();
+      globe.destroy();
+      globeRef.current = null;
+    };
+  }, [reduced]);
+
+  useImperativeHandle(ref, () => ({
+    /** Fly to a coordinate and descend. Resolves when the camera arrives. */
+    async diveTo(coords) {
+      const globe = globeRef.current;
+      if (!globe || !coords) return false;
+      setDiving(true);
+      await globe.diveTo({ lat: coords.lat, lng: coords.lng });
+      onDiveEnd?.();
+      return true;
+    },
+    async ascend() {
+      setDiving(false);
+      await globeRef.current?.ascend();
+    },
+    get available() {
+      return Boolean(globeRef.current);
+    },
+  }), [onDiveEnd]);
+
   return (
     <div
       className="relative hidden flex-1 overflow-hidden sm:block"
-      style={{ background: "radial-gradient(120% 120% at 70% 10%, #0f7a63 0%, #0b5c4b 45%, #083b31 100%)" }}
+      style={{ background: "radial-gradient(120% 120% at 70% 10%, #07231d 0%, #041713 55%, #010a08 100%)" }}
     >
-      <div className="bg-grid absolute inset-0 opacity-[0.06]" aria-hidden="true" />
-
-      {/* Faint starfield */}
-      <div aria-hidden="true" className="absolute inset-0">
-        {[
-          [12, 22],
-          [82, 16],
-          [68, 74],
-          [24, 66],
-          [90, 52],
-          [45, 12],
-          [8, 84],
-          [58, 40],
-        ].map(([l, t], i) => (
-          <span
-            key={i}
-            className="anim-twinkle absolute h-1 w-1 rounded-full bg-white/70"
-            style={{ left: `${l}%`, top: `${t}%`, animationDelay: `${i * 0.4}s` }}
-          />
-        ))}
-      </div>
-
-      {/* Globe */}
-      <div className="absolute inset-0 grid place-items-center">
-        <div className="anim-float relative" aria-hidden="true">
-          {/* glow + radar ping */}
-          <div
-            className="absolute left-1/2 top-1/2 h-[62%] w-[62%] -translate-x-1/2 -translate-y-1/2 rounded-full blur-2xl"
-            style={{ background: "radial-gradient(circle, rgba(120,255,220,0.45), transparent 70%)" }}
-          />
-          <span className="anim-ping-soft absolute left-1/2 top-1/2 h-40 w-40 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/25" />
-
-          <svg viewBox="0 0 340 340" style={{ height: "min(58vh, 440px)", width: "min(58vh, 440px)" }} role="img" aria-label="Animated globe">
-            <defs>
-              <radialGradient id="sphereShade" cx="38%" cy="32%" r="80%">
-                <stop offset="0%" stopColor="rgba(255,255,255,0.34)" />
-                <stop offset="42%" stopColor="rgba(255,255,255,0.06)" />
-                <stop offset="100%" stopColor="rgba(3,32,26,0.5)" />
-              </radialGradient>
-              <clipPath id="globeClip">
-                <circle cx={CX} cy={CY} r={R} />
-              </clipPath>
-            </defs>
-
-            {/* body */}
-            <circle cx={CX} cy={CY} r={R} fill="rgba(255,255,255,0.04)" />
-
-            <g clipPath="url(#globeClip)" fill="none" stroke="rgba(255,255,255,0.28)" strokeWidth="1">
-              {LATITUDES.map((l, i) => (
-                <ellipse key={`lat${i}`} cx={CX} cy={l.cy} rx={l.rx} ry={l.ry} />
-              ))}
-              {LONGITUDES.map((rx, i) => (
-                <ellipse key={`lon${i}`} cx={CX} cy={CY} rx={rx} ry={R} />
-              ))}
-              <line x1={CX} y1={CY - R} x2={CX} y2={CY + R} />
-              <circle cx={CX} cy={CY} r={R} fill="url(#sphereShade)" stroke="none" />
-            </g>
-
-            {/* rim */}
-            <circle cx={CX} cy={CY} r={R} fill="none" stroke="rgba(255,255,255,0.6)" strokeWidth="1.5" />
-
-            {/* orbit rings + travelling dots */}
-            {ORBITS.map((o, i) => (
-              <g key={`orb${i}`} transform={`rotate(${o.tilt} ${CX} ${CY})`}>
-                <ellipse
-                  cx={CX}
-                  cy={CY}
-                  rx={o.rx}
-                  ry={o.rx * o.flat}
-                  fill="none"
-                  stroke="rgba(255,255,255,0.16)"
-                  strokeWidth="1"
-                  strokeDasharray="1 9"
-                />
-                <g style={{ transformOrigin: `${CX}px ${CY}px`, transform: `scaleY(${o.flat})` }}>
-                  <g
-                    className={o.rev ? "anim-spin-rev" : "anim-spin-slow"}
-                    style={{ transformOrigin: `${CX}px ${CY}px`, animationDuration: `${o.dur}s` }}
-                  >
-                    <circle cx={CX + o.rx} cy={CY} r={12} fill="#eafff8" />
-                    <circle cx={CX + o.rx} cy={CY} r={5.5} fill="#ffffff" />
-                  </g>
-                </g>
-              </g>
-            ))}
-          </svg>
+      {failed ? (
+        // No WebGL2: a static panel beats a black rectangle.
+        <div
+          className="absolute inset-0"
+          style={{ background: "radial-gradient(120% 120% at 70% 10%, #0f7a63 0%, #0b5c4b 45%, #083b31 100%)" }}
+        >
+          <div className="bg-grid absolute inset-0 opacity-[0.06]" aria-hidden="true" />
+          <div className="absolute inset-0 grid place-items-center">
+            <Globe2 className="h-32 w-32 text-white/15" aria-hidden="true" />
+          </div>
         </div>
-      </div>
+      ) : (
+        <canvas
+          ref={canvasRef}
+          className="absolute inset-0 h-full w-full"
+          role="img"
+          aria-label="The Earth seen from orbit, turning slowly"
+        />
+      )}
 
-      {/* Copy */}
-      <div className="absolute inset-x-0 bottom-0 p-10">
-        <h2 className="max-w-md text-3xl font-semibold leading-tight tracking-tight text-white text-balance">
-          Every ride, a little smoother.
-        </h2>
-        <p className="mt-2 max-w-sm text-sm text-white/70">
-          Set your pickup to see live cars and your route on the map.
-        </p>
-      </div>
-
-      {/* Chips */}
-      <div className="glass absolute left-6 top-6 inline-flex items-center gap-1.5 rounded-full border border-white/15 px-3.5 py-1.5 text-xs font-medium text-white/90">
-        <Sparkles className="h-3.5 w-3.5" />
-        City mobility, reimagined
-      </div>
-      <div className="absolute bottom-6 right-6 inline-flex items-center gap-1.5 text-xs font-medium text-white/55">
-        <ShieldCheck className="h-3.5 w-3.5" />
-        Encrypted &amp; secure
+      {/* Copy lifts away during the descent so the planet is unobstructed. */}
+      <div
+        className="pointer-events-none absolute inset-0 flex flex-col justify-end p-10 transition-all duration-700 xl:p-14"
+        style={{ opacity: diving ? 0 : 1, transform: diving ? "translateY(-1.5rem)" : "none" }}
+      >
+        {/* The limb is bright enough to swallow white text where they overlap,
+            so the copy sits on its own scrim rather than on the planet. */}
+        <div
+          aria-hidden="true"
+          className="absolute inset-x-0 bottom-0 h-2/3"
+          style={{ background: "linear-gradient(to top, rgba(2,10,8,.88) 0%, rgba(2,10,8,.62) 38%, rgba(2,10,8,0) 100%)" }}
+        />
+        <div className="pointer-events-auto relative max-w-md">
+          <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-medium text-white/85 backdrop-blur">
+            <Sparkles className="h-3.5 w-3.5" />
+            Pick a point on Earth
+          </span>
+          <h2 className="mt-4 text-3xl font-semibold leading-tight tracking-tight text-white drop-shadow-lg">
+            Anywhere you&apos;re going,
+            <br />
+            someone&apos;s already headed.
+          </h2>
+          <p className="mt-2 max-w-sm text-sm text-white/70">
+            Set your pickup and we&apos;ll drop straight down to it — then find you a
+            ride, or a seat in one already on the road.
+          </p>
+          <p className="mt-5 inline-flex items-center gap-2 text-xs text-white/55">
+            <ShieldCheck className="h-3.5 w-3.5" />
+            Verified drivers · OTP boarding · live tracking
+          </p>
+        </div>
       </div>
     </div>
   );
-}
+});
+
+export default IdleGlobe;

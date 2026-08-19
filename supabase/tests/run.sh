@@ -6,33 +6,45 @@
 #
 #   sudo ./supabase/tests/run.sh
 #
+# Each test file gets its own freshly migrated database. They are not written to
+# tolerate each other's leftovers, and they should not have to be: sharing one
+# database made 03's counts depend on how many rides 02 happened to leave behind.
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MIG="$HERE/../migrations"
-DB="${GOLGOL_TEST_DB:-golgol_test}"
 STAGE="$(mktemp -d)"
 trap 'rm -rf "$STAGE"' EXIT
 
 cp "$MIG"/*.sql "$HERE"/*.sql "$STAGE"/
 chmod -R a+rX "$STAGE"
 
-run() { su postgres -c "psql -v ON_ERROR_STOP=1 -q -d $DB -f $STAGE/$1" 2>&1 | grep -v '^psql.*NOTICE:  \(relation\|constraint\|trigger\|column\|extension\|table\)'; }
+TESTS=(01_geometry.sql 02_pooling_flow.sql 03_seat_holds.sql)
+MIGRATIONS=(00_shim.sql $(cd "$MIG" && ls -1 [0-9]*.sql | sort))
 
-su postgres -c "psql -q -c 'drop database if exists $DB' -c 'create database $DB'" >/dev/null 2>&1
+psql_run() { su postgres -c "psql -v ON_ERROR_STOP=1 -q -d $1 -f $STAGE/$2" 2>&1 | grep -v '^psql.*NOTICE:  \(relation\|constraint\|trigger\|column\|extension\|table\|database\)'; }
+
+migrate() {
+  su postgres -c "psql -q -c 'drop database if exists $1' -c 'create database $1'" >/dev/null 2>&1
+  for f in "${MIGRATIONS[@]}"; do
+    out=$(psql_run "$1" "$f")
+    if echo "$out" | grep -q ERROR; then
+      echo "✗ $f"; echo "$out" | grep -B1 -A3 ERROR; return 1
+    fi
+    [ "$1" = "golgol_t0" ] && echo "✓ $f"
+  done
+  return 0
+}
+
+echo "── migrations"
+migrate golgol_t0 || exit 1
 
 fail=0
-for f in 00_shim.sql $(cd "$MIG" && ls -1 [0-9]*.sql | sort); do
-  out=$(run "$f")
-  if echo "$out" | grep -q ERROR; then
-    echo "✗ $f"; echo "$out" | grep -B1 -A3 ERROR; exit 1
-  fi
-  echo "✓ $f"
-done
-
-echo
-for t in 01_geometry.sql 02_pooling_flow.sql; do
+for t in "${TESTS[@]}"; do
+  db="golgol_$(basename "$t" .sql)"
+  migrate "$db" >/dev/null || { echo "✗ could not prepare $db"; exit 1; }
+  echo
   echo "── $t"
-  out=$(run "$t")
+  out=$(psql_run "$db" "$t")
   echo "$out" | grep -E 'PASS|FAIL|ERROR|══|^ +[0-9]+ \|' || echo "$out"
   fail=$(( fail + $(echo "$out" | grep -c 'FAIL\|ERROR') ))
 done

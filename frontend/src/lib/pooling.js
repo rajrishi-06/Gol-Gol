@@ -19,6 +19,30 @@ const rpc = async (fn, args) => {
 /** Pending requests that fit the route the driver is already on. */
 export const poolableRides = (limit = 5) => rpc("poolable_rides", { p_limit: limit });
 
+/**
+ * Reserve the seat *and* the request while the driver decides.
+ *
+ * Without this an offer was only ever a snapshot: correct — the row lock meant
+ * the vehicle could never be oversold — but a driver could tap a card and be
+ * told no. A hold re-runs every check the accept will run, then locks the
+ * request against other dispatchers for `seconds`.
+ *
+ * Resolves to `null` when the request was already taken or held by someone
+ * else, which is the normal way to lose a race, not an error.
+ */
+export const holdPoolSeat = async (rideId) => {
+  const { data, error } = await rpc("hold_pool_seat", { p_ride_id: rideId });
+  if (error) return { data: null, error };
+  const row = Array.isArray(data) ? data[0] : data;
+  return {
+    data: row ? { holdId: row.hold_id, expiresAt: row.expires_at, seconds: row.seconds } : null,
+    error: null,
+  };
+};
+
+/** Give a held seat back — the driver dismissed the offer or navigated away. */
+export const releaseSeatHold = (rideId) => rpc("release_seat_hold", { p_ride_id: rideId });
+
 /** Take another booking onto the current trip. Null means it was taken first. */
 export const acceptPooledRide = (rideId) => rpc("accept_pooled_ride", { p_ride_id: rideId });
 
