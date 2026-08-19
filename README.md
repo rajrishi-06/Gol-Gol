@@ -28,9 +28,12 @@ ratings, receipts, driver earnings and a safety toolkit — all from a browser.
 > bootstrap and an end-to-end test path. `docs/FEATURE_ANALYSIS.md` is the audit
 > behind the current design.
 >
-> **Sharing rides?** `docs/POOLING_ARCHITECTURE.md` covers en-route pooling and
-> adaptive seat capacity — both built. `sudo ./supabase/tests/run.sh` applies every
-> migration to a throwaway Postgres and asserts the whole flow.
+> **Sharing rides?** `docs/POOLING_ARCHITECTURE.md` covers en-route pooling,
+> adaptive seat capacity and seat holds — all built. `sudo ./supabase/tests/run.sh`
+> applies every migration to a throwaway Postgres and asserts the whole flow.
+>
+> **The globe on the home screen** is documented in `docs/HOME_GLOBE.md`. Rebuild
+> its texture from coastline data with `npm run bake:earth`.
 
 ---
 
