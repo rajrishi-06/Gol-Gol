@@ -10,6 +10,7 @@ import {
 } from "../lib/googlemaps";
 import { fetchRoute } from "../lib/geocoding";
 import { distanceKm, hasValidCoords } from "../lib/geo";
+import MapFallback from "./MapFallback";
 
 const DEFAULT_CENTER = { lat: 17.4239, lng: 78.4738 }; // Hyderabad
 
@@ -23,13 +24,19 @@ export default function HomeMap({ fromCords, toCords }) {
   const routeRef = useRef(null);
   const markersRef = useRef([]);
   const [mapLoaded, setMapLoaded] = useState(false);
+  const [mapFailed, setMapFailed] = useState(false);
   const [trip, setTrip] = useState(null);
 
   // Initialize Google Maps instance
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      await loadGoogleMaps();
+      try {
+        await loadGoogleMaps();
+      } catch {
+        if (!cancelled) setMapFailed(true);
+        return;
+      }
       if (cancelled || !containerRef.current || mapRef.current) return;
 
       const center = hasValidCoords(fromCords)
@@ -164,7 +171,7 @@ export default function HomeMap({ fromCords, toCords }) {
 
   return (
     <div className="relative hidden flex-1 sm:block">
-      <div ref={containerRef} className="h-full w-full" />
+      {mapFailed ? <MapFallback /> : <div ref={containerRef} className="h-full w-full" />}
 
       <div className="animate-fade-in glass pointer-events-none absolute left-4 top-4 inline-flex items-center gap-1.5 rounded-full border border-border px-3.5 py-1.5 text-xs font-medium text-foreground shadow-soft">
         <Sparkles className="h-3.5 w-3.5 text-primary" />

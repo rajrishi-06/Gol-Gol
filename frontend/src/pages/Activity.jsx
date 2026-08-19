@@ -174,11 +174,14 @@ export default function Activity({ defaultRole = "all" }) {
     load();
   }, [load]);
 
-  const roleFilters = [
-    { id: "all", label: "All" },
-    { id: "rider", label: "As rider" },
-    ...(isApprovedDriver ? [{ id: "driver", label: "As driver" }] : []),
-  ];
+  // Only worth showing to someone who is actually both.
+  const roleFilters = isApprovedDriver
+    ? [
+        { id: "all", label: "All" },
+        { id: "rider", label: "As rider" },
+        { id: "driver", label: "As driver" },
+      ]
+    : [];
 
   const isDriverView = defaultRole === "driver";
 
@@ -200,7 +203,7 @@ export default function Activity({ defaultRole = "all" }) {
     >
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-2">
-        {!isDriverView && roleFilters.length > 1 && (
+        {!isDriverView && roleFilters.length > 0 && (
           <div role="group" aria-label="Filter by role" className="flex gap-1 rounded-xl border border-border bg-surface-2 p-1">
             {roleFilters.map((f) => (
               <button

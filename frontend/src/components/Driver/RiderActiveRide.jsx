@@ -26,6 +26,7 @@ import Card from "../ui/Card";
 import Badge from "../ui/Badge";
 import Spinner from "../ui/Spinner";
 import RideSheet from "../RideSheet";
+import MapFallback from "../MapFallback";
 import RideStatusStepper from "../ride/RideStatusStepper";
 import SafetyPanel from "../ride/SafetyPanel";
 import CancelRideDialog from "../ride/CancelRideDialog";
@@ -48,6 +49,7 @@ function TrackingMap({ ride, driverLocation, vehicleType, onBack }) {
   const fitted = useRef(false);
   const [mapReady, setMapReady] = useState(false);
   const [localEta, setLocalEta] = useState(null);
+  const [mapFailed, setMapFailed] = useState(false);
 
   // Where the driver is currently heading. Memoised so the recenter callback
   // and the routing effect don't see a new object on every render.
@@ -74,7 +76,12 @@ function TrackingMap({ ride, driverLocation, vehicleType, onBack }) {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      await loadGoogleMaps();
+      try {
+        await loadGoogleMaps();
+      } catch {
+        if (!cancelled) setMapFailed(true);
+        return;
+      }
       if (cancelled || !containerRef.current || mapRef.current) return;
       mapRef.current = createMap(containerRef.current, {
         center: { lat: ride.from_lat, lng: ride.from_lng },
@@ -183,7 +190,11 @@ function TrackingMap({ ride, driverLocation, vehicleType, onBack }) {
 
   return (
     <div className="relative h-full w-full">
-      <div ref={containerRef} className="h-full w-full" />
+      {mapFailed ? (
+        <MapFallback message="We can't draw the map, but your ride is still live — the status and ETA below are up to date." />
+      ) : (
+        <div ref={containerRef} className="h-full w-full" />
+      )}
 
       <button
         onClick={onBack}

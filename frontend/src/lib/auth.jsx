@@ -31,6 +31,9 @@ const EMPTY = {
 export function AuthProvider({ children }) {
   const [state, setState] = useState(EMPTY);
   const [status, setStatus] = useState("loading"); // loading | authenticated | anonymous
+  // The session resolves before the profile does (see loadContext). Role-gated
+  // routes must wait for this, or they'd redirect on a not-yet-loaded role.
+  const [profileLoaded, setProfileLoaded] = useState(false);
   const loadingRef = useRef(false);
 
   /** Load the profile + driver + settings rows for a signed-in user. */
@@ -41,8 +44,10 @@ export function AuthProvider({ children }) {
     if (!userId) {
       setState(EMPTY);
       setStatus("anonymous");
+      setProfileLoaded(true);
       return;
     }
+    setProfileLoaded(false);
 
     // Resolve the session first. The profile rows are supporting detail — if
     // that fetch is slow or fails, the app should still render (signed in, with
@@ -82,6 +87,7 @@ export function AuthProvider({ children }) {
       driver: driver ?? null,
       settings: resolvedSettings,
     });
+    setProfileLoaded(true);
   }, []);
 
   useEffect(() => {
@@ -157,6 +163,7 @@ export function AuthProvider({ children }) {
     currentUserId = null;
     setState(EMPTY);
     setStatus("anonymous");
+    setProfileLoaded(true);
   }, []);
 
   const value = useMemo(() => {
@@ -164,6 +171,9 @@ export function AuthProvider({ children }) {
     return {
       status,
       loading: status === "loading",
+      // True once the profile/driver/settings rows have been fetched. Anything
+      // that branches on a *role* must wait for this, not just `loading`.
+      profileLoaded,
       isAuthenticated: status === "authenticated",
       session,
       user,
@@ -180,7 +190,7 @@ export function AuthProvider({ children }) {
       updateSettings,
       signOut,
     };
-  }, [state, status, refresh, updateProfile, updateSettings, signOut]);
+  }, [state, status, profileLoaded, refresh, updateProfile, updateSettings, signOut]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

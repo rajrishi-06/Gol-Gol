@@ -57,7 +57,11 @@ export default function DriverRoute({ ride, onClose }) {
     };
 
     (async () => {
-      await loadGoogleMaps();
+      try {
+        await loadGoogleMaps();
+      } catch {
+        return; // the preview is an enhancement; the list still works
+      }
       if (cancelled || !mapContainerRef.current) return;
 
       const driverStart = ride.driver?.driver_start;

@@ -2,25 +2,55 @@ import { supabase } from "./supabase";
 
 /**
  * Live ride location over Supabase Realtime **Broadcast** — an ephemeral pub/sub
- * channel, so high-frequency GPS updates don't hammer Postgres (the previous
- * design wrote a row on every tick). The database is still used for the
- * last-known position (a throttled write), so a rider opening the screen sees
- * the driver immediately before the next broadcast arrives.
+ * channel, so high-frequency GPS updates don't hammer Postgres (the original
+ * design wrote a row on every tick). The database still holds the last-known
+ * position via a throttled write, so a rider opening the screen sees the driver
+ * immediately, before the next broadcast arrives.
  *
  * The channel is keyed by the ride UUID, which only the rider and driver know.
- * For production, promote this to an RLS-authorized private channel.
+ * For a hardened deployment, promote this to an RLS-authorized private channel.
  */
 const channelName = (rideId) => `ride-location:${rideId}`;
 
-/** Driver side: join the ride channel and return a `send(loc)` + `cleanup()`. */
+/** Driver side: join the ride channel and return `send(loc)` + `cleanup()`. */
 export function publishRideLocation(rideId) {
+  let subscribed = false;
+  let pending = null;
+
   const channel = supabase.channel(channelName(rideId), {
     config: { broadcast: { self: false } },
   });
-  channel.subscribe();
+
+  const push = (loc) => channel.send({ type: "broadcast", event: "loc", payload: loc });
+
+  channel.subscribe((status) => {
+    if (status !== "SUBSCRIBED") {
+      subscribed = false;
+      return;
+    }
+    subscribed = true;
+    // Flush the most recent fix taken while the socket was still connecting.
+    if (pending) {
+      push(pending);
+      pending = null;
+    }
+  });
+
   return {
-    send: (loc) => channel.send({ type: "broadcast", event: "loc", payload: loc }),
-    cleanup: () => supabase.removeChannel(channel),
+    // Before the channel is joined, `send` silently falls back to an HTTP
+    // request per call — on a GPS stream that's a request every second or two.
+    // Hold the latest fix instead and flush it on subscribe.
+    send: (loc) => {
+      if (!subscribed) {
+        pending = loc;
+        return;
+      }
+      push(loc);
+    },
+    cleanup: () => {
+      pending = null;
+      supabase.removeChannel(channel);
+    },
   };
 }
 

@@ -111,7 +111,7 @@ export default function SavedPlaces() {
       subtitle="Book to your regular spots in one tap"
       back
       actions={
-        <Button size="sm" onClick={() => openEditor("custom")}>
+        <Button size="sm" aria-label="Add a place" onClick={() => openEditor("custom")}>
           <Plus className="h-4 w-4" />
           <span className="hidden sm:inline">Add</span>
         </Button>

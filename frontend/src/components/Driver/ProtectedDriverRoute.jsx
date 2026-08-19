@@ -10,10 +10,12 @@ import PageLoader from "../PageLoader";
  * Duty is now only ever changed by the driver, through the duty switch.
  */
 export default function ProtectedDriverRoute({ children }) {
-  const { loading, isAuthenticated, driver, isApprovedDriver } = useAuth();
+  const { loading, profileLoaded, isAuthenticated, driver, isApprovedDriver } = useAuth();
   const location = useLocation();
 
-  if (loading) return <PageLoader />;
+  // The driver row arrives after the session does; redirecting before it lands
+  // would send an approved driver to the onboarding form on every reload.
+  if (loading || (isAuthenticated && !profileLoaded)) return <PageLoader />;
   if (!isAuthenticated) {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   }

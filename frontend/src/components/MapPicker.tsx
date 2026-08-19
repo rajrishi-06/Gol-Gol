@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useState } from "react";
 import { Crosshair, ArrowLeft, Check, Search, MapPin } from "lucide-react";
 import { loadGoogleMaps, createMap, restrictionAround, attachCenterZoom, minZoomForRadius } from "../lib/googlemaps";
 import { reverseGeocode, forwardGeocode, resolvePlace } from "../lib/geocoding";
+import MapFallback from "./MapFallback";
 
 interface MapPickerProps {
   /** Called with the chosen address and its coordinates. */
@@ -34,6 +35,7 @@ const MapPicker: React.FC<MapPickerProps> = ({ onConfirm, onClose, initialCenter
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [didUserType, setDidUserType] = useState(false);
   const [ready, setReady] = useState(false);
+  const [mapFailed, setMapFailed] = useState(false);
 
   // Keep a ref in sync so map event listeners (bound once) read the latest value.
   useEffect(() => {
@@ -72,7 +74,12 @@ const MapPicker: React.FC<MapPickerProps> = ({ onConfirm, onClose, initialCenter
       if (cancelled) return;
       setCoords({ lat, lng });
 
-      await loadGoogleMaps();
+      try {
+        await loadGoogleMaps();
+      } catch {
+        if (!cancelled) setMapFailed(true);
+        return;
+      }
       if (cancelled || !mapContainerRef.current) return;
 
       const minZoom = minZoomForRadius(lat, MAX_RADIUS_KM);
@@ -205,7 +212,11 @@ const MapPicker: React.FC<MapPickerProps> = ({ onConfirm, onClose, initialCenter
 
   return (
     <div className="fixed inset-0 z-50 flex-1 sm:relative sm:inset-auto sm:z-auto sm:block">
-      <div ref={mapContainerRef} className="absolute inset-0 h-full w-full" />
+      {mapFailed ? (
+        <MapFallback className="absolute inset-0" message="We can't load the map to drop a pin. Search for an address above instead." />
+      ) : (
+        <div ref={mapContainerRef} className="absolute inset-0 h-full w-full" />
+      )}
 
       {/* Top search bar */}
       <div className="absolute inset-x-0 top-0 z-30 p-3 sm:p-4">

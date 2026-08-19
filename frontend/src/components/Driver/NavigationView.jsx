@@ -23,6 +23,7 @@ import { fetchRoute } from "../../lib/geocoding";
 import { distanceMeters } from "../../lib/geo";
 import { formatDistance, formatDuration, formatTime } from "../../lib/format";
 import { cn } from "../../lib/cn";
+import MapFallback from "../MapFallback";
 
 /** Pick a maneuver arrow from the instruction text (Google gives us prose). */
 function maneuverIcon(instruction = "") {
@@ -75,6 +76,7 @@ export default function NavigationView({
   // that reset on every reload.
   const [muted, setMuted] = useState(!voiceEnabled);
   const [ready, setReady] = useState(false);
+  const [mapFailed, setMapFailed] = useState(false);
   const onEtaRef = useRef(onEta);
   useEffect(() => {
     onEtaRef.current = onEta;
@@ -122,7 +124,12 @@ export default function NavigationView({
     if (!origin || !destination) return;
     let cancelled = false;
     (async () => {
-      await loadGoogleMaps();
+      try {
+        await loadGoogleMaps();
+      } catch {
+        if (!cancelled) setMapFailed(true);
+        return;
+      }
       if (cancelled || !containerRef.current || mapRef.current) return;
       const [oLng, oLat] = origin;
       const map = createMap(containerRef.current, {
@@ -233,7 +240,11 @@ export default function NavigationView({
 
   return (
     <div className="relative h-full w-full">
-      <div ref={containerRef} className="h-full w-full" />
+      {mapFailed ? (
+        <MapFallback message="Navigation can't draw the map right now. Turn-by-turn directions are unavailable — use your own maps app." />
+      ) : (
+        <div ref={containerRef} className="h-full w-full" />
+      )}
 
       {/* Top maneuver banner */}
       <div className="pointer-events-none absolute inset-x-0 top-0 p-3 sm:p-4">

@@ -51,13 +51,18 @@ function EarningsChart({ rows }) {
           const value = Number(r.payout) || 0;
           const pct = Math.max(3, Math.round((value / max) * 100));
           return (
-            <div key={r.day} className="group flex min-w-0 flex-1 flex-col items-center gap-1">
-              <span className="text-[0.6rem] font-medium text-muted opacity-0 transition-opacity group-hover:opacity-100">
+            <div
+              key={r.day}
+              // `h-full` matters: the bar's height is a percentage, which only
+              // resolves against a parent with a definite height.
+              className="group flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1"
+            >
+              <span className="shrink-0 text-[0.6rem] font-medium text-muted opacity-0 transition-opacity group-hover:opacity-100">
                 {formatCurrency(value)}
               </span>
               <div
                 className={cn(
-                  "w-full rounded-t-md bg-primary transition-all duration-300",
+                  "w-full shrink-0 rounded-t-md bg-primary transition-all duration-300",
                   value === 0 && "bg-border"
                 )}
                 style={{ height: `${pct}%` }}
@@ -121,7 +126,7 @@ export default function Earnings() {
       title="Earnings"
       subtitle="What you've made and where it came from"
       actions={
-        <Button as={Link} to="/driver/trips" variant="ghost" size="sm">
+        <Button as={Link} to="/driver/trips" variant="ghost" size="sm" aria-label="Your trips">
           <Receipt className="h-4 w-4" />
           <span className="hidden sm:inline">Trips</span>
         </Button>

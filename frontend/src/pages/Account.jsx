@@ -107,7 +107,7 @@ export default function Account() {
     <Page
       title="Account"
       actions={
-        <Button variant="ghost" size="sm" onClick={handleSignOut}>
+        <Button variant="ghost" size="sm" aria-label="Log out" onClick={handleSignOut}>
           <LogOut className="h-4 w-4" />
           <span className="hidden sm:inline">Log out</span>
         </Button>

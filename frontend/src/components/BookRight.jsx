@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   loadGoogleMaps,
   createMap,
@@ -10,19 +10,26 @@ import {
   restrictionAround,
 } from "../lib/googlemaps";
 import { fetchRoute } from "../lib/geocoding";
+import MapFallback from "./MapFallback";
 
 /** Route preview map for the booking screen. */
 export default function BookRight({ fromCords, toCords }) {
   const mapContainer = useRef(null);
   const mapRef = useRef(null);
   const routeRef = useRef(null);
+  const [mapFailed, setMapFailed] = useState(false);
 
   useEffect(() => {
     if (!fromCords) return;
     let cancelled = false;
 
     (async () => {
-      await loadGoogleMaps();
+      try {
+        await loadGoogleMaps();
+      } catch {
+        if (!cancelled) setMapFailed(true);
+        return;
+      }
       if (cancelled || !mapContainer.current) return;
 
       if (!mapRef.current) {
@@ -60,7 +67,7 @@ export default function BookRight({ fromCords, toCords }) {
 
   return (
     <div className="relative hidden flex-1 sm:block">
-      <div ref={mapContainer} className="h-full w-full" />
+      {mapFailed ? <MapFallback /> : <div ref={mapContainer} className="h-full w-full" />}
     </div>
   );
 }

@@ -34,7 +34,10 @@ function QuickPlaces({ places, recents, onPick }) {
   if (!items.length) return null;
 
   return (
-    <div className="mt-3 flex gap-2 overflow-x-auto pb-1" aria-label="Saved and recent destinations">
+    <div
+      className="mt-3 flex shrink-0 gap-2 overflow-x-auto pb-1"
+      aria-label="Saved and recent destinations"
+    >
       {items.map(({ key, icon: Icon, label, place }) => (
         <button
           key={key}

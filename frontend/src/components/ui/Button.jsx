@@ -18,6 +18,11 @@ const variants = {
   outline: "border border-border-strong text-foreground hover:bg-surface-2 hover:border-primary/50",
   danger: "bg-danger text-white shadow-soft hover:bg-danger-hover hover:-translate-y-px",
   subtle: "bg-primary-subtle text-primary-subtle-fg hover:brightness-[0.97]",
+  // For use on a dark/brand-coloured surface, where the primary fill would
+  // disappear. A real variant rather than a className override, because
+  // Tailwind resolves conflicting utilities by stylesheet order — an override
+  // of `bg-*`/`text-*` on top of a variant silently loses.
+  inverse: "bg-white text-brand-800 shadow-floating hover:bg-white/90",
 };
 
 const sizes = {

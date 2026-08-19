@@ -86,11 +86,7 @@ export default function ActiveRideAside({ ride, role }) {
             </div>
           </div>
 
-          <Button
-            onClick={back}
-            size="lg"
-            className="mt-6 bg-white text-brand-800 shadow-floating hover:bg-white/90"
-          >
+          <Button onClick={back} size="lg" variant="inverse" className="mt-6">
             <Navigation className="h-4 w-4" />
             {role === "driver" ? "Resume navigation" : "Return to live map"}
             <ArrowRight className="h-4 w-4" />

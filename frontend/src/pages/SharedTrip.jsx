@@ -19,6 +19,7 @@ import Badge from "../components/ui/Badge";
 import Button from "../components/ui/Button";
 import Spinner from "../components/ui/Spinner";
 import { LogoMark } from "../components/ui/Logo";
+import MapFallback from "../components/MapFallback";
 
 const POLL_MS = 10000;
 
@@ -42,6 +43,7 @@ export default function SharedTrip() {
   const driverMarker = useRef(null);
   const routeRef = useRef(null);
   const fitted = useRef(false);
+  const [mapFailed, setMapFailed] = useState(false);
 
   const load = useCallback(async () => {
     const { trip: row } = await fetchSharedTrip(token);
@@ -69,7 +71,12 @@ export default function SharedTrip() {
     if (state !== "ok" || !trip || !containerRef.current || mapRef.current) return;
     let cancelled = false;
     (async () => {
-      await loadGoogleMaps();
+      try {
+        await loadGoogleMaps();
+      } catch {
+        if (!cancelled) setMapFailed(true);
+        return;
+      }
       if (cancelled || !containerRef.current || mapRef.current) return;
       const map = createMap(containerRef.current, {
         center: { lat: trip.from_lat, lng: trip.from_lng },
@@ -161,7 +168,7 @@ export default function SharedTrip() {
 
   return (
     <div className="relative h-full w-full">
-      <div ref={containerRef} className="h-full w-full" />
+      {mapFailed ? <MapFallback /> : <div ref={containerRef} className="h-full w-full" />}
 
       {/* Header */}
       <div className="pointer-events-none absolute inset-x-0 top-0 p-3 sm:p-4">

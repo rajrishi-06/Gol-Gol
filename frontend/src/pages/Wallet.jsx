@@ -62,7 +62,7 @@ export default function Wallet() {
       subtitle="Payments, receipts and how you pay"
       actions={
         isApprovedDriver && (
-          <Button as={Link} to="/driver/earnings" variant="ghost" size="sm">
+          <Button as={Link} to="/driver/earnings" variant="ghost" size="sm" aria-label="Driver earnings">
             <IndianRupee className="h-4 w-4" />
             <span className="hidden sm:inline">Earnings</span>
           </Button>
