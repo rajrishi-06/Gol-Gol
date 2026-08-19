@@ -52,7 +52,18 @@ export function BookingProvider({ children }) {
     }
   }, [trip]);
 
-  const patch = useCallback((next) => setTrip((prev) => ({ ...prev, ...next })), []);
+  const patch = useCallback(
+    (next) =>
+      setTrip((prev) => {
+        // Bail when nothing actually changed. Callers include effects that
+        // write a *derived* field (the scheduled departure time) on every
+        // render — without this guard, each write produces a new object,
+        // which re-runs the effect, which writes again.
+        const changed = Object.keys(next).some((key) => !Object.is(prev[key], next[key]));
+        return changed ? { ...prev, ...next } : prev;
+      }),
+    []
+  );
 
   const setPickup = useCallback(
     (address, coords) => patch({ from: address ?? "", fromCords: coords ?? null }),

@@ -80,7 +80,7 @@ export default function Help() {
   return (
     <Page title="Help & support" subtitle="Answers, and how to reach us" back>
       <div className="space-y-4">
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid gap-2 min-[420px]:grid-cols-2">
           {TOPICS.map(({ to, label, icon: Icon, hint }) => (
             <Link
               key={to}

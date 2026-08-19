@@ -3,7 +3,7 @@ import { cn } from "../../lib/cn";
 import { LogoMark } from "../ui/Logo";
 import { SECONDARY_LINKS, ADMIN_LINK } from "./navItems";
 
-function RailLink({ to, label, icon: Icon, end, badge }) {
+function RailLink({ to, label, short, icon: Icon, end, badge }) {
   return (
     <li>
       <NavLink
@@ -35,7 +35,7 @@ function RailLink({ to, label, icon: Icon, end, badge }) {
                 </span>
               )}
             </span>
-            <span className="leading-none">{label}</span>
+            <span className="leading-none">{short ?? label}</span>
           </>
         )}
       </NavLink>

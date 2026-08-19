@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Home, Briefcase, MapPin, Clock, ArrowUpDown } from "lucide-react";
 import { useAuth } from "../lib/auth.jsx";
@@ -60,6 +60,12 @@ export default function LeftPanel({ onPickFrom, onPickTo }) {
   const trip = useBooking();
 
   const [activeTab, setActiveTab] = useState("DAILY RIDES");
+
+  // `patch` is stable, so these are too — LocationInputs uses them as effect
+  // dependencies.
+  const { patch } = trip;
+  const setWhen = useCallback((when) => patch({ when }), [patch]);
+  const setScheduledFor = useCallback((scheduledFor) => patch({ scheduledFor }), [patch]);
   const [places, setPlaces] = useState([]);
   const [recents, setRecents] = useState([]);
 
@@ -128,8 +134,8 @@ export default function LeftPanel({ onPickFrom, onPickTo }) {
           fromValue={trip.from}
           toValue={trip.to}
           whenValue={trip.when}
-          onWhenChange={(when) => trip.patch({ when })}
-          setDateOfDeparture={(scheduledFor) => trip.patch({ scheduledFor })}
+          onWhenChange={setWhen}
+          setDateOfDeparture={setScheduledFor}
           onPickFrom={onPickFrom}
           onPickTo={onPickTo}
           onSwap={trip.swap}

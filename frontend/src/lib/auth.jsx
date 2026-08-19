@@ -44,12 +44,23 @@ export function AuthProvider({ children }) {
       return;
     }
 
+    // Resolve the session first. The profile rows are supporting detail — if
+    // that fetch is slow or fails, the app should still render (signed in, with
+    // a name that fills in a moment later) rather than sit on a splash screen
+    // forever on a flaky connection.
+    setState((prev) => ({ ...prev, session, user: session.user }));
+    setStatus("authenticated");
+
     // Fetch in parallel — none of them depend on each other.
     const [{ data: profile }, { data: driver }, { data: settings }] = await Promise.all([
       supabase.from("users").select("*").eq("id", userId).maybeSingle(),
       supabase.from("drivers").select("*").eq("user_id", userId).maybeSingle(),
       supabase.from("user_settings").select("*").eq("user_id", userId).maybeSingle(),
     ]);
+
+    // A sign-out (or a switch to another account) can land while we were
+    // waiting; don't overwrite the newer state with stale rows.
+    if (currentUserId !== userId) return;
 
     // A brand-new account may not have a settings row yet (the migration
     // backfills existing users; the trigger only creates the profile).
@@ -61,6 +72,7 @@ export function AuthProvider({ children }) {
         .select()
         .maybeSingle();
       resolvedSettings = data ?? null;
+      if (currentUserId !== userId) return;
     }
 
     setState({
@@ -70,7 +82,6 @@ export function AuthProvider({ children }) {
       driver: driver ?? null,
       settings: resolvedSettings,
     });
-    setStatus("authenticated");
   }, []);
 
   useEffect(() => {

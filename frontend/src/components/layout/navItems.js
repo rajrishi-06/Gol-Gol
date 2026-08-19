@@ -35,15 +35,23 @@ export const DRIVER_TABS = [
   { to: "/account", label: "Account", icon: User },
 ];
 
-/** Secondary destinations — side rail footer, account page, command menu. */
+/**
+ * Secondary destinations — side rail, account page.
+ * `short` is what the 84px rail shows, so labels never wrap to two lines.
+ */
 export const SECONDARY_LINKS = [
-  { to: "/account/places", label: "Saved places", icon: MapPinned },
+  { to: "/account/places", label: "Saved places", short: "Places", icon: MapPinned },
   { to: "/account/safety", label: "Safety", icon: ShieldCheck },
   { to: "/account/settings", label: "Settings", icon: Settings },
-  { to: "/help", label: "Help & support", icon: LifeBuoy },
+  { to: "/help", label: "Help & support", short: "Help", icon: LifeBuoy },
 ];
 
-export const ADMIN_LINK = { to: "/admin/drivers", label: "Driver verification", icon: UserCheck };
+export const ADMIN_LINK = {
+  to: "/admin/drivers",
+  label: "Driver verification",
+  short: "Verify",
+  icon: UserCheck,
+};
 
 /**
  * Routes that own the whole viewport — a full-screen map with its own controls.
