@@ -51,7 +51,7 @@ create or replace function public.search_published_rides(
      and (p_max_price is null or p_max_price <= 0 or pr.fare_per_seat <= p_max_price)
      and (p_max_detour_km is null or p_max_detour_km <= 0
           or public.haversine_km(p_lat, p_lng, pr.from_lat, pr.from_lng) <= p_max_detour_km)
-   order by 21 asc, pr.departure_time asc
+   order by public.haversine_km(p_lat, p_lng, pr.from_lat, pr.from_lng) asc, pr.departure_time asc
    limit 50;
 $$;
 grant execute on function public.search_published_rides(

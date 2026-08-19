@@ -385,6 +385,9 @@ grant execute on function public.set_driver_duty(boolean) to authenticated;
 -- ── dispatch ────────────────────────────────────────────────────────────────
 -- Nearby pending rides for the calling driver. Runs as definer so drivers never
 -- need blanket SELECT on `rides`; it enforces approval, duty state and class.
+-- 0003 declared this with a narrower result; a return type cannot be changed
+-- by CREATE OR REPLACE, so it has to go first.
+drop function if exists public.nearby_pending_rides(double precision, double precision, text, double precision);
 create or replace function public.nearby_pending_rides(
   p_lat double precision,
   p_lng double precision,
