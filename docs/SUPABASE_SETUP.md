@@ -3,12 +3,45 @@
 Follow top to bottom for a fresh project. Your current project ref is
 `xrgmxebfvpaonbcvrczd` (URL `https://xrgmxebfvpaonbcvrczd.supabase.co`).
 
-## 0. Database schema — ✅ already done
+## 0. Database schema
 
 `supabase link` + `supabase db push` applied migrations `0001`–`0004`. The
 `pg-delta` "failed to cache migrations catalog" warning is **non-fatal** — every
-`Applying migration ...` line succeeded, so all tables, RLS, triggers, RPCs and
-realtime publications exist. Nothing else to do here.
+`Applying migration ...` line succeeded.
+
+### ⚠️ Two newer migrations must be applied
+
+```
+supabase/migrations/0005_production_platform.sql
+supabase/migrations/0006_tighten_driver_reads.sql
+```
+
+Run `supabase db push` again, or paste each file into the SQL editor **in
+order**. Both are idempotent, so re-running them is safe. Between them they:
+
+- fix the vehicle taxonomy so Mini/Sedan/SUV rides can be dispatched at all;
+- close the RLS holes (anonymous phone-number enumeration, world-readable driver
+  licence numbers and live GPS, "any user can edit any pending ride");
+- add ratings, payments/receipts, cancellations, scheduling, saved places,
+  emergency contacts, SOS, trip sharing, settings and an event timeline;
+- move every ride state transition into a server-side RPC.
+
+The app will not work correctly against `0001`–`0004` alone.
+
+### Make yourself an admin
+
+Driver applications are approved from `/admin/drivers`, which is gated on
+`users.is_admin`. After signing in once, run:
+
+```sql
+update public.users set is_admin = true where mobile = '<your 10-digit number>';
+```
+
+### Optional: scheduled maintenance
+
+Ride expiry and scheduled-ride release are called by the app itself, so nothing
+is required. For a busy deployment, enable `pg_cron` (Database → Extensions) and
+uncomment the block at the end of `0005_production_platform.sql`.
 
 ## 1. Get the new project's API keys
 

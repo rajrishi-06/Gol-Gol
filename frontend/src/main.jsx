@@ -10,6 +10,7 @@ import { AuthProvider } from "./lib/auth.jsx";
 import { ConnectionProvider } from "./lib/connection.jsx";
 import { ActiveRideProvider } from "./lib/activeRide.jsx";
 import { BookingProvider } from "./lib/booking.jsx";
+import { toast } from "sonner";
 import { registerServiceWorker } from "./lib/pwa.js";
 
 createRoot(document.getElementById("root")).render(
@@ -31,4 +32,14 @@ createRoot(document.getElementById("root")).render(
   </StrictMode>
 );
 
-registerServiceWorker();
+// A ride-hailing app can be open for an hour; offer the new build rather than
+// silently serving a stale one until every tab is closed.
+registerServiceWorker({
+  onUpdateReady: (applyUpdate) => {
+    toast("A new version is available", {
+      description: "Refresh to get the latest fixes.",
+      duration: Infinity,
+      action: { label: "Refresh", onClick: applyUpdate },
+    });
+  },
+});

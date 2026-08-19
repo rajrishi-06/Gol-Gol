@@ -10,166 +10,144 @@
 [![Vite](https://img.shields.io/badge/Vite-6-646CFF?logo=vite&logoColor=white&style=flat-square)](https://vitejs.dev)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind-v4-38BDF8?logo=tailwindcss&logoColor=white&style=flat-square)](https://tailwindcss.com)
 [![Supabase](https://img.shields.io/badge/Supabase-Postgres%20%7C%20Auth%20%7C%20Realtime-3ECF8E?logo=supabase&logoColor=white&style=flat-square)](https://supabase.com)
-[![PWA](https://img.shields.io/badge/PWA-Installable-5A0FC8?logo=pwa&logoColor=white&style=flat-square)](#)
-[![0 Vulnerabilities](https://img.shields.io/badge/npm%20vulnerabilities-0-brightgreen?style=flat-square)](#)
+[![PWA](https://img.shields.io/badge/PWA-Offline%20capable-5A0FC8?logo=pwa&logoColor=white&style=flat-square)](#)
 
 </div>
 
 ---
 
-## 🚀 What Is Gol·Gol?
+## 🚀 What is Gol·Gol?
 
-Gol·Gol is a **full-stack, real-time ride-sharing platform** — think Ola/Uber meets BlaBlaCar — built as a Progressive Web App targeting Indian urban commuters. It connects **riders** who need a cab or carpool with **drivers** who are online and nearby, with live GPS tracking, in-ride chat, push notifications, and OTP-verified ride starts — all from a browser, no app store required.
+A full-stack, real-time ride-sharing platform — think Ola/Uber meets BlaBlaCar —
+built as a Progressive Web App for Indian urban commuters. It connects **riders**
+who need a cab with **drivers** who are online and nearby, with live GPS
+tracking, turn-by-turn navigation, in-ride chat, OTP-verified boarding, two-way
+ratings, receipts, driver earnings and a safety toolkit — all from a browser.
 
----
-
-## ⚡ Core Features
-
-### 🧑‍💼 Rider Experience
-
-#### 📍 Smart Location Booking
-- Interactive **Mapbox GL** map with tap-to-pin location picking — works on mobile as a full-screen overlay
-- **Google Places autocomplete** for address search with intelligent geocoding fallback
-- Connected **From → To route rail** with auto-computed distance and upfront fare estimate
-
-#### 🚗 Vehicle Selection
-| Vehicle | Base Fare | Rate |
-|---|---|---|
-| Auto | ₹25 | ₹12/km |
-| Bike | ₹15 | ₹8/km |
-| Mini | ₹40 | ₹15/km |
-| Prime Sedan | ₹60 | ₹18/km |
-| Prime SUV | ₹80 | ₹22/km |
-
-#### 🤝 Carpool / Find Match
-- Browse **published carpool rides** that overlap with the rider's route
-- Request to join with custom pickup/drop pins, seat count, and price preference
-- **Real-time request status** — get notified the moment a driver accepts or rejects
-
-#### 📡 Live Ride Tracking
-- Rider's **active ride screen** streams the driver's GPS position in real-time via Supabase Realtime
-- ETA updates as the driver moves; ride status transitions from `accepted → ongoing → completed`
-
-#### 💬 In-Ride Chat
-- Persistent in-ride messaging between rider and driver
-- Messages stored in Postgres, delivered in real-time; both parties see the full chat history
-
-#### 🔔 Push Notifications
-- **In-app** toasts via Sonner when the tab is open
-- **Background Web Push** (even with the tab closed) powered by a Supabase Edge Function + VAPID
-- Events covered: ride accepted, ride started, ride cancelled, new chat message
+> **Setting it up?** `docs/IMPLEMENTATION.md` has the migration order, the admin
+> bootstrap and an end-to-end test path. `docs/FEATURE_ANALYSIS.md` is the audit
+> behind the current design.
 
 ---
 
-### 🚦 Driver Experience
+## 🧭 How you move around
 
-#### 🟢 Driver Activation & Onboarding
-- Drivers register with their vehicle type, license, and registration details
-- Admin-controlled **verification workflow** — only `approved` drivers can go online or publish carpools
+One shell, everywhere: a **side rail on desktop**, a **tab bar on phones**, and a
+persistent **"ride in progress" strip** that keeps the live map one tap away from
+any screen.
 
-#### 🗺️ Real-Time Dispatch Dashboard
-- Driver goes online → GPS is watched via `navigator.geolocation.watchPosition` and written to Supabase every few seconds
-- **Supabase Realtime** streams new `rides` inserts; the dashboard filters to show only:
-  - Rides with **matching vehicle type**
-  - Pickup within a **5 km radius** of the driver's current position
-- Accepting a ride is **optimistic and race-safe** — the DB update only succeeds if the ride is still `pending`, preventing two drivers from accepting the same ride simultaneously
-
-#### 🧭 Navigation View
-- Dedicated in-ride navigation screen with route polyline, live GPS tracking, and turn-by-turn guidance
-- Driver UI is designed for glanceability: large targets, high contrast, minimal taps — safe while driving
-
-#### 🔑 OTP Ride Start
-- Before departing, the driver verifies the rider with a **server-generated one-time pin** (set by a DB trigger, not the client)
-- Prevents driver fraud and ensures the right rider boards
-
-#### 📋 Carpool Publishing
-- Drivers post a scheduled route with available seats, fare per seat, and departure time
-- Distance auto-calculated via Haversine formula
-- Incoming rider join-requests appear in real-time; driver can **accept, reject, or remove** riders
-- Accepted riders stored as a **JSONB array** on the ride row, supporting multi-rider carpools
-
----
-
-## 🏗️ Engineering Highlights
-
-### Real-Time Architecture
-- **Supabase Realtime** (`postgres_changes`) subscriptions on 6 tables: `rides`, `active_drivers`, `chat_messages`, `ride_requests`, `published_rides`, `notifications`
-- Channels are scoped narrowly (e.g. `ride_requests:${rideId}`) and cleaned up on unmount — zero memory leaks
-
-### Security
-- **Row Level Security** on every Postgres table — riders only see their own rides, drivers only manage their own rows, chat is private to the two parties on the ride
-- **XSS-safe** map popups — all user content uses `setText` not `setHTML`
-- Zero server-only packages shipped to the browser (no `express`, `socket.io`, etc.)
-- **0 npm vulnerabilities** (down from 25 in the initial MVP)
-- Only anon/public keys in client env vars; secrets stay server-side in Edge Function environment
-
-### Performance
-| Metric | Result |
+| Riding | Driving |
 |---|---|
-| Initial JS (landing + login) | ~146 KB gzip |
-| Mapbox GL | Deferred — only loads when a map is opened |
-| Code splitting | Per-route `React.lazy` + `Suspense` |
-| Vendor chunks | `mapbox`, `supabase`, `react-vendor` isolated |
-| npm packages | 184 (down from 379) |
+| **Ride** — map, saved places, ride classes | **Drive** — duty switch, live dispatch |
+| **Activity** — trips, receipts, ratings | **Trips** — everything you've driven |
+| **Wallet** — payments and method | **Earnings** — payouts, tips, daily chart |
+| **Account** — profile, places, safety, settings, help | **Account** — same |
 
-### Database Design
-- **4 sequential migrations** applied via Supabase CLI — fully reproducible schema from scratch
-- DB triggers handle: user profile creation on signup (phone → 10-digit mobile extraction), fare computation, OTP generation — keeping business logic server-authoritative
-- Optimised indexes on `rides(status)`, `active_drivers(is_online, on_ride)`, `chat_messages(ride_id, created_at)`
-
-### Design System
-- **Tokenised CSS** (`index.css`) — brand + semantic color scales, type scale, elevation levels (`shadow-soft/elevated/floating/brand`), motion tokens (`--ease-out-quart`, `--animate-fade-in/up/scale-in`)
-- Full **light/dark mode** via `data-theme` attribute — no flash on load, persistent, respects `prefers-color-scheme`
-- Full **`prefers-reduced-motion`** support throughout
-- Reusable `ui/` primitive kit: `Button`, `Card`, `Field`, `Badge`, `Spinner`, `Skeleton`, `OtpInput`, `Alert`, `Avatar`, `EmptyState`
-
-### Accessibility (toward WCAG AA)
-- Semantic landmarks, real `<button>` controls, ARIA `tablist` with keyboard navigation
-- Visible `:focus-visible` rings on all interactive elements
-- `role="alert"` / `role="status"` live regions for async state changes
-- Inline `Alert` components replace blocking `window.alert()` / `window.confirm()`
-- Content-shaped **Skeleton** loaders replace bare "Loading…" text
-- `ErrorBoundary` prevents a single thrown error from white-screening the app
-
-### PWA
-- Web App Manifest (`manifest.webmanifest`) with icon set (192px, 512px, maskable)
-- Service Worker for offline shell and Web Push delivery
-- Installable on Android/iOS — no app store required
+Approved drivers get a Ride/Drive switch in the header. Admins get a driver
+verification console.
 
 ---
 
-## 🛠️ Tech Stack
+## ⚡ Features
+
+### 🧑‍💼 Riders
+
+- **Book in a few taps** — Places autocomplete, drop-a-pin map picker, saved
+  Home/Work, recent destinations, swap pickup/drop.
+- **Live supply** — nearby driver count and arrival estimate per ride class,
+  computed server-side (no driver positions leave the database).
+- **Upfront pricing** — fare breakdown before you confirm; the server recomputes
+  it on booking, so the app can't invent a price.
+- **Schedule ahead** — a future pickup time parks the ride until ~10 minutes
+  before departure.
+- **Live tracking** — the driver's marker moves in real time, the route redraws,
+  and the ETA is the same number the driver's own navigation is quoting.
+- **OTP boarding** — a server-generated code only you can see; the driver enters
+  it without ever reading it.
+- **Safety** — expiring share-a-trip links, emergency contacts, one-tap
+  helplines and an SOS that records your position and alerts your ride partner.
+- **After the trip** — receipt, two-way rating with tags and an optional tip,
+  and one-tap re-book.
+
+### 🚦 Drivers
+
+- **Onboarding** with a real verification workflow — licence, registration,
+  vehicle details and the **service class** you'll serve.
+- **Dispatch that works** — requests matched on service class, within 5 km, with
+  the rider's name, rating, both addresses and the pickup distance on the card.
+- **Race-safe accepting** — an atomic claim; the loser is told immediately.
+- **On/off duty** without logging out, with heartbeats so "online" means online.
+- **Turn-by-turn navigation** — maneuver banner, spoken guidance, rerouting,
+  follow mode, arrival detection.
+- **Earnings** — payout after platform fee, tips, distance, and a daily chart.
+
+### 🤝 Carpool
+
+Publish a route with seats, fare and departure time; riders search overlapping
+routes sorted by detour and request a seat. Accept/decline/remove are row-locked
+so a car can't be overbooked, and every decision notifies the rider.
+
+---
+
+## 🏗️ Engineering notes
+
+**Real-time.** A single connection provider surfaces `online / connecting /
+offline` and hands screens a re-sync hook, so a backgrounded phone catches up
+instead of silently going stale. Ride row, event timeline and chat share one
+subscription. Driver GPS streams over Realtime **Broadcast** (with a throttled DB
+write for last-known position); chat typing indicators use **Presence**, so
+neither costs a database write.
+
+**Server-authoritative.** Distance, fare, the start-OTP and every state
+transition live in Postgres. Clients call RPCs — `accept_ride`,
+`mark_driver_arrived`, `start_ride`, `complete_ride`, `cancel_ride`,
+`submit_rating` — each of which checks the caller's role and writes an
+append-only `ride_events` row.
+
+**Security.** RLS is scoped to actual counterparties: anonymous users can't
+enumerate phone numbers, signed-in users can't read other drivers' licence
+numbers or live GPS, and nobody can edit a ride that isn't theirs. Dispatch
+visibility is narrowed to on-duty drivers of the right class within 8 km, so
+realtime doesn't broadcast every pickup in the city.
+
+**Offline.** The service worker keeps the app shell and hashed assets available
+without a network (never API or map traffic), and prompts to refresh when a new
+build lands.
+
+**Accessibility.** Semantic landmarks, real buttons, ARIA tab lists and
+comboboxes, focus-trapped dialogs, live regions for async state, visible focus
+rings, and full `prefers-reduced-motion` support.
+
+---
+
+## 🛠️ Tech stack
 
 | Layer | Technology |
 |---|---|
 | **UI** | React 19, Vite 6, Tailwind CSS v4 |
 | **Routing** | React Router DOM v7 |
-| **Backend / DB** | Supabase (Postgres, Phone OTP Auth, RLS, Realtime, Edge Functions) |
-| **Maps** | Mapbox GL JS, Google Maps (Geocoding, Places, Routes APIs) |
-| **Push** | Web Push API + VAPID + Deno Edge Function |
-| **State** | React local state + Supabase Realtime (no external store) |
-| **Icons** | Lucide React |
-| **Notifications** | Sonner (toasts) |
+| **Backend / DB** | Supabase — Postgres, Phone OTP auth, RLS, Realtime, Edge Functions |
+| **Maps** | Google Maps JS + Geocoding, Places (New) and Routes APIs |
+| **Push** | Web Push + VAPID + a Deno Edge Function |
+| **State** | React context + Supabase Realtime (no external store) |
+| **Icons / toasts / sheets** | Lucide, Sonner, Vaul |
 
 ---
 
-## 📊 Before vs After (Production Transformation)
+## 🏁 Getting started
 
-| Metric | MVP | Production |
-|---|---|---|
-| JS bundle (landing) | 598 KB gzip (2.1 MB raw) | **146 KB gzip** |
-| npm vulnerabilities | **25** | **0** |
-| Code splitting | None (single chunk) | Per-route lazy + vendor chunks |
-| Dark mode | None | Full, tokenised, no-flash |
-| Mobile map picking | Broken (`hidden sm:block`) | Full-screen overlay, works on phone |
-| Error handling | White screen on throw | `ErrorBoundary` + inline alerts |
-| Loading states | Bare "Loading…" text | Content-shaped skeletons |
-| Map popup XSS | Unescaped `setHTML` | Safe `setText` |
-| Distance filter bug | Object passed as latitude | Fixed — correct Haversine |
-| 404 route | None (rendered nothing) | Branded `NotFound` page |
+```bash
+cd frontend
+npm install
+cp .env.example .env.local     # fill in your keys
+npm run dev
+```
+
+Apply `supabase/migrations/0005_*.sql` and `0006_*.sql` to your project first —
+see `docs/IMPLEMENTATION.md` §1.
 
 ---
 
 <div align="center">
-  <sub>Built for Indian city commuters · Primary market: Hyderabad · React 19 + Supabase + Mapbox</sub>
+  <sub>Built for Indian city commuters · Primary market: Hyderabad · React 19 + Supabase + Google Maps</sub>
 </div>

@@ -25,13 +25,20 @@ export async function upsertSavedPlace({ id, userId, kind = "custom", label, add
   if (id) {
     return supabase.from("saved_places").update(row).eq("id", id).select().maybeSingle();
   }
-  // `home` and `work` are unique per user — replace rather than duplicate.
+
+  // Home and Work are one-per-user (enforced by a unique index on the generated
+  // `slot` column). Look the existing row up and update it rather than relying
+  // on ON CONFLICT inference over a generated column.
   if (kind === "home" || kind === "work") {
-    return supabase
+    const { data: existing } = await supabase
       .from("saved_places")
-      .upsert(row, { onConflict: "user_id,kind" })
-      .select()
+      .select("id")
+      .eq("user_id", userId)
+      .eq("kind", kind)
       .maybeSingle();
+    if (existing) {
+      return supabase.from("saved_places").update(row).eq("id", existing.id).select().maybeSingle();
+    }
   }
   return supabase.from("saved_places").insert(row).select().maybeSingle();
 }

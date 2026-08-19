@@ -25,6 +25,10 @@ const EMPTY = {
   vehicleType: null,
 };
 
+// The carpool a rider is previewing on the map. Kept out of the persisted trip
+// because it's a transient view, not part of the booking.
+const PREVIEW_EMPTY = null;
+
 function readStored() {
   try {
     const raw = sessionStorage.getItem(KEY);
@@ -38,6 +42,7 @@ function readStored() {
 
 export function BookingProvider({ children }) {
   const [trip, setTrip] = useState(readStored);
+  const [previewRide, setPreviewRide] = useState(PREVIEW_EMPTY);
 
   useEffect(() => {
     try {
@@ -70,11 +75,14 @@ export function BookingProvider({ children }) {
     []
   );
 
-  const reset = useCallback(() => setTrip(EMPTY), []);
+  const reset = useCallback(() => {
+    setTrip(EMPTY);
+    setPreviewRide(PREVIEW_EMPTY);
+  }, []);
 
   const value = useMemo(
-    () => ({ ...trip, patch, setPickup, setDrop, swap, reset }),
-    [trip, patch, setPickup, setDrop, swap, reset]
+    () => ({ ...trip, previewRide, setPreviewRide, patch, setPickup, setDrop, swap, reset }),
+    [trip, previewRide, patch, setPickup, setDrop, swap, reset]
   );
 
   return <BookingContext.Provider value={value}>{children}</BookingContext.Provider>;

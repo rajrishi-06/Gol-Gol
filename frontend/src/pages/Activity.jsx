@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Clock, MapPin, RefreshCw, Star, ChevronRight, Car } from "lucide-react";
 import { myRides } from "../lib/rides";
@@ -143,14 +143,16 @@ export default function Activity({ defaultRole = "all" }) {
   const [error, setError] = useState(false);
   const [done, setDone] = useState(false);
   const [rating, setRating] = useState(null);
+  const offsetRef = useRef(0);
 
   const load = useCallback(
     async ({ append = false } = {}) => {
-      const offset = append ? trips.length : 0;
+      const offset = append ? offsetRef.current : 0;
       if (append) setLoadingMore(true);
       else {
         setLoading(true);
         setDone(false);
+        offsetRef.current = 0;
       }
       setError(false);
 
@@ -158,14 +160,13 @@ export default function Activity({ defaultRole = "all" }) {
       if (err) setError(true);
       else {
         const rows = data ?? [];
+        offsetRef.current = offset + rows.length;
         setTrips((prev) => (append ? [...prev, ...rows] : rows));
         if (rows.length < PAGE_SIZE) setDone(true);
       }
       setLoading(false);
       setLoadingMore(false);
     },
-    // `trips.length` is read for the offset but must not retrigger the effect.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [role, status]
   );
 

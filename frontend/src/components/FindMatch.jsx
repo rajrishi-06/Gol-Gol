@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import { Search, Send, Users, Clock, Check } from "lucide-react";
+import { Search, Send, Users, Clock, Check, Map as MapIcon } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../lib/auth.jsx";
-import { distanceKm, hasValidCoords } from "../lib/geo";
+import { useBooking } from "../lib/booking.jsx";
+import { hasValidCoords } from "../lib/geo";
 import { formatCurrency, formatDistance, formatTime } from "../lib/format";
 import { cn } from "../lib/cn";
 import Button from "./ui/Button";
@@ -28,6 +29,7 @@ const inputCls =
  */
 export default function FindMatch({ fromCords, toCords, dateOfDeparture }) {
   const { userId } = useAuth();
+  const { setPreviewRide } = useBooking();
   const [form, setForm] = useState({ seats: 1, maxPrice: "", maxDistance: "", notes: "" });
   const [rides, setRides] = useState([]);
   const [myRequests, setMyRequests] = useState({});
@@ -81,43 +83,37 @@ export default function FindMatch({ fromCords, toCords, dateOfDeparture }) {
     setLoading(true);
     setError(null);
 
-    let query = supabase
-      .from("published_rides")
-      // The driver's mobile is deliberately not selected — it's only shared
-      // once they accept you onto the ride.
-      .select("*, drivers(vehicle_class, vehicle_type, users(name, user_rating))")
-      .eq("status", "active")
-      .gte("available_seats", form.seats)
-      .order("departure_time", { ascending: true });
-
-    if (dateOfDeparture && new Date(dateOfDeparture) > new Date()) {
-      query = query.gte("departure_time", dateOfDeparture);
-    }
-    if (form.maxPrice && parseFloat(form.maxPrice) > 0) {
-      query = query.lte("fare_per_seat", parseFloat(form.maxPrice));
-    }
-
-    const { data, error: err } = await query;
+    // A server-side search: seat, price and detour filtering all happen in the
+    // database, and only safe driver fields come back. Reading `drivers`
+    // directly used to expose every driver's licence number and document URL
+    // to any signed-in user.
+    const { data, error: err } = await supabase.rpc("search_published_rides", {
+      p_lat: fromCords.lat,
+      p_lng: fromCords.lng,
+      p_seats: form.seats,
+      p_max_price: form.maxPrice ? parseFloat(form.maxPrice) : null,
+      p_max_detour_km: form.maxDistance ? parseFloat(form.maxDistance) : null,
+      p_after:
+        dateOfDeparture && new Date(dateOfDeparture) > new Date() ? dateOfDeparture : null,
+    });
     setLoading(false);
+
     if (err) {
       setError("Couldn't search shared rides. Please try again.");
       return;
     }
 
-    let results = data ?? [];
-    const radius = parseFloat(form.maxDistance);
-    if (radius > 0) {
-      results = results.filter(
-        (r) => distanceKm(fromCords, { lat: r.from_lat, lng: r.from_lng }) <= radius
-      );
-    }
-    // Closest pickup first — the thing that actually decides whether a shared
-    // ride is worth taking.
-    results = results
-      .map((r) => ({ ...r, detour_km: distanceKm(fromCords, { lat: r.from_lat, lng: r.from_lng }) }))
-      .sort((a, b) => a.detour_km - b.detour_km);
-
+    const results = data ?? [];
     setRides(results);
+    // Seed request state from the search itself, so a page reload still shows
+    // which rides you've already asked to join.
+    setMyRequests((prev) => {
+      const next = { ...prev };
+      results.forEach((r) => {
+        if (r.my_request_status) next[r.id] = r.my_request_status;
+      });
+      return next;
+    });
     setSearched(true);
   };
 
@@ -148,6 +144,24 @@ export default function FindMatch({ fromCords, toCords, dateOfDeparture }) {
     setMyRequests((prev) => ({ ...prev, [ride.id]: "pending" }));
     toast.success("Request sent — we'll tell you as soon as the driver decides.");
   };
+
+  /** Shape the map preview expects: the driver's leg plus each rider's stops. */
+  const preview = (ride) => ({
+    id: ride.id,
+    driver: {
+      driver_start: { lat: ride.from_lat, lng: ride.from_lng },
+      driver_end: { lat: ride.to_lat, lng: ride.to_lng },
+    },
+    riders: [
+      ...(ride.accepted_riders ?? []).map((r) => ({
+        pickup: r.pickup?.lat != null ? r.pickup : null,
+        drop: r.drop?.lat != null ? r.drop : null,
+        name: r.name || "Rider",
+      })),
+      // Show where *you* would join, so the detour is obvious.
+      { pickup: fromCords, drop: toCords, name: "You" },
+    ],
+  });
 
   const statusBadge = (status) => {
     if (status === "accepted") return <Badge tone="success">You&apos;re on board</Badge>;
@@ -235,15 +249,15 @@ export default function FindMatch({ fromCords, toCords, dateOfDeparture }) {
             <div className="space-y-2">
               {rides.map((ride) => {
                 const status = myRequests[ride.id];
-                const driverName = ride.drivers?.users?.name || "Driver";
+                const driverName = ride.driver_name || "Driver";
                 return (
                   <Card key={ride.id} className="p-3.5">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="truncate text-sm font-semibold text-foreground">{driverName}</p>
                         <p className="flex items-center gap-1.5 text-xs text-muted">
-                          <StarRating value={ride.drivers?.users?.user_rating} size="sm" />
-                          <span className="capitalize">{ride.drivers?.vehicle_class || "car"}</span>
+                          <StarRating value={ride.driver_rating} size="sm" />
+                          <span className="capitalize">{ride.vehicle_class || "car"}</span>
                         </p>
                       </div>
                       <div className="shrink-0 text-right">
@@ -292,6 +306,13 @@ export default function FindMatch({ fromCords, toCords, dateOfDeparture }) {
                           {form.seats === 1 ? "seat" : "seats"}
                         </Button>
                       )}
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => setPreviewRide(preview(ride))}
+                      >
+                        <MapIcon className="h-3.5 w-3.5" /> View on map
+                      </Button>
                       {status === "accepted" && (
                         <span className="inline-flex items-center gap-1 text-xs text-success-fg">
                           <Check className="h-3.5 w-3.5" /> The driver has your details

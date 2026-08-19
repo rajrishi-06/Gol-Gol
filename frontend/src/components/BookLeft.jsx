@@ -67,13 +67,16 @@ function Searching({ elapsed, onCancel, cancelling }) {
  */
 export default function BookLeft() {
   const navigate = useNavigate();
-  const { userId } = useAuth();
+  const { userId, settings } = useAuth();
   const trip = useBooking();
 
   const [fromAddress, setFromAddress] = useState(trip.from || "");
   const [toAddress, setToAddress] = useState(trip.to || "");
   const [notes, setNotes] = useState(trip.pickupNotes || "");
-  const [method, setMethod] = useState(trip.paymentMethod || "cash");
+  // Falls back to the rider's saved default from Settings/Wallet.
+  const [method, setMethod] = useState(
+    trip.paymentMethod || settings?.default_payment_method || "cash"
+  );
 
   const [phase, setPhase] = useState("review"); // review | searching | scheduled | nodrivers
   const [rideId, setRideId] = useState(null);

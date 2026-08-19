@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { X } from "lucide-react";
 import {
   loadGoogleMaps,
   createMap,
@@ -36,8 +37,12 @@ async function routeCoords(coords) {
   return route?.geometry?.coordinates ?? null;
 }
 
-/** Preview of a driver's full multi-rider route. Desktop-only enhancement. */
-export default function DriverRoute({ ride }) {
+/**
+ * Preview of a shared ride's full multi-rider route: the driver's leg in brand
+ * green, each rider's leg in its own colour, with pickup/drop dots. Lets a
+ * rider see the detour before asking for a seat.
+ */
+export default function DriverRoute({ ride, onClose }) {
   const mapContainerRef = useRef(null);
   const mapRef = useRef(null);
   const overlaysRef = useRef([]);
@@ -132,9 +137,23 @@ export default function DriverRoute({ ride }) {
   return (
     <div className="relative h-full w-full">
       <div ref={mapContainerRef} className="absolute inset-0 h-full w-full" />
-      <div className="glass absolute left-4 top-4 rounded-2xl border border-border px-4 py-3 shadow-floating">
-        <p className="text-sm font-semibold text-foreground">Shared route</p>
-        <p className="text-xs text-muted">{ride.riders?.length || 0} rider(s) on this trip</p>
+      <div className="glass absolute left-4 top-4 flex items-center gap-3 rounded-2xl border border-border px-4 py-3 shadow-floating">
+        <div>
+          <p className="text-sm font-semibold text-foreground">Shared route</p>
+          <p className="text-xs text-muted">
+            {ride.riders?.length || 0} {ride.riders?.length === 1 ? "rider" : "riders"} on this trip
+          </p>
+        </div>
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close route preview"
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-muted transition-colors hover:bg-surface-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        )}
       </div>
     </div>
   );

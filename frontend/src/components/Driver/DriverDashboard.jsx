@@ -6,7 +6,12 @@ import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../lib/auth.jsx";
 import { useConnection } from "../../lib/connection.jsx";
 import { useDriverPresence } from "../../lib/useDriverPresence";
-import { acceptRide, nearbyPendingRides, setDriverDuty } from "../../lib/rides";
+import {
+  acceptRide,
+  nearbyPendingRides,
+  releaseScheduledRides,
+  setDriverDuty,
+} from "../../lib/rides";
 import { distanceKm } from "../../lib/geo";
 import { notifyUser } from "../../lib/notify";
 import { formatCurrency, formatDistance } from "../../lib/format";
@@ -191,6 +196,10 @@ export default function DriverDashboard() {
 
   const refresh = useCallback(async () => {
     if (!isOnline || !position || !vehicleClass) return;
+    // Move any scheduled booking whose window has opened into dispatch. Doing
+    // it here means scheduled rides work without a cron job; add the pg_cron
+    // schedule in migration 0005's notes for a busy deployment.
+    releaseScheduledRides();
     const { data, error } = await nearbyPendingRides({
       lat: position.lat,
       lng: position.lng,

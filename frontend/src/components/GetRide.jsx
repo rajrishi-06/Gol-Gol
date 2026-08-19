@@ -10,8 +10,9 @@ import IdleGlobe from "./IdleGlobe";
 import ActiveRideAside from "./ActiveRideAside";
 import PageLoader from "./PageLoader";
 
-// Defer the map bundle until the user actually opens the picker.
+// Defer the map bundles until they're actually opened.
 const MapPicker = lazy(() => import("./MapPicker"));
+const DriverRoute = lazy(() => import("./DriverRoute"));
 
 /**
  * Home: book a ride.
@@ -56,6 +57,12 @@ export default function Home() {
               onConfirm={commitPick}
               onClose={() => setPicking(null)}
             />
+          </Suspense>
+        ) : trip.previewRide ? (
+          <Suspense fallback={<div className="relative flex-1"><PageLoader /></div>}>
+            <div className="relative hidden flex-1 sm:block">
+              <DriverRoute ride={trip.previewRide} onClose={() => trip.setPreviewRide(null)} />
+            </div>
           </Suspense>
         ) : activeRide ? (
           <ActiveRideAside ride={activeRide} role={role} />

@@ -39,6 +39,27 @@ Deno.serve(async (req) => {
     if (!user_id || !title) return json({ error: "user_id and title are required" }, 400);
 
     const admin = createClient(SUPABASE_URL, SERVICE_ROLE);
+
+    // Respect the recipient's notification preferences. Only the service role
+    // can read another user's settings, which is why this check lives here
+    // rather than on the sending client. Safety alerts are never suppressed.
+    if (type && type !== "sos") {
+      const { data: settings } = await admin
+        .from("user_settings")
+        .select("notify_ride, notify_chat, notify_promos")
+        .eq("user_id", user_id)
+        .maybeSingle();
+      if (settings) {
+        const allowed =
+          type === "chat"
+            ? settings.notify_chat
+            : type === "promo"
+            ? settings.notify_promos
+            : settings.notify_ride;
+        if (allowed === false) return json({ ok: true, sent: 0, skipped: "muted" });
+      }
+    }
+
     const { data: subs } = await admin
       .from("push_subscriptions")
       .select("endpoint, p256dh, auth")

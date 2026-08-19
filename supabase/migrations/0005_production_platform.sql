@@ -1217,3 +1217,32 @@ update public.users u
    set total_rides = coalesce((
          select count(*) from public.rides r
           where r.status = 'completed' and (r.rider_id = u.id or r.driver_id = u.id)), 0);
+
+-- ###########################################################################
+-- 11. OPTIONAL: scheduled maintenance
+--
+-- The app calls `expire_stale_rides()` and `release_scheduled_rides()` itself
+-- (a waiting rider resolves their own stuck request; the driver dashboard
+-- releases scheduled bookings on each poll), so nothing here is required.
+--
+-- On a busy deployment, run them on a schedule instead — enable pg_cron in the
+-- Supabase dashboard (Database → Extensions) and uncomment:
+--
+--   create extension if not exists pg_cron;
+--
+--   select cron.schedule('golgol-expire-rides', '* * * * *', $$
+--     select public.expire_stale_rides(interval '5 minutes');
+--   $$);
+--
+--   select cron.schedule('golgol-release-scheduled', '* * * * *', $$
+--     select public.release_scheduled_rides(interval '10 minutes');
+--   $$);
+--
+--   -- Drop drivers who stopped heartbeating out of the matching pool.
+--   select cron.schedule('golgol-prune-drivers', '*/5 * * * *', $$
+--     update public.active_drivers
+--        set is_online = false
+--      where is_online
+--        and heartbeat_at < now() - interval '5 minutes';
+--   $$);
+-- ###########################################################################
