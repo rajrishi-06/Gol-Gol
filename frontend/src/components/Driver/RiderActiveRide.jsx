@@ -378,7 +378,14 @@ export default function RiderActiveRide() {
   }
 
   // Still searching for a driver.
+  //
+  // A ride can also arrive back here *after* a driver had accepted: if extra
+  // passengers filled their vehicle, the booking is returned to dispatch at no
+  // cost. Going from "your driver is arriving" back to "waiting" without a word
+  // of explanation is exactly the experience that re-dispatch exists to avoid,
+  // so say what happened.
   if (!ride.driver_id) {
+    const displaced = ride.cancellation_reason === "capacity_displaced";
     return (
       <>
         <div className="flex h-full flex-col items-center justify-center gap-4 bg-background px-6 text-center">
@@ -388,7 +395,17 @@ export default function RiderActiveRide() {
               <Car className="h-6 w-6" />
             </span>
           </div>
-          <p className="text-muted">Waiting for a driver to accept…</p>
+          {displaced ? (
+            <div className="max-w-xs">
+              <p className="font-medium text-foreground">Finding you another driver</p>
+              <p className="mt-1 text-sm text-muted">
+                Your last driver&apos;s vehicle filled up before they reached you. We&apos;re
+                matching you again now — at your original fare, with nothing extra to pay.
+              </p>
+            </div>
+          ) : (
+            <p className="text-muted">Waiting for a driver to accept…</p>
+          )}
           <div className="flex gap-2">
             <Button variant="secondary" onClick={() => navigate("/")}>
               Back to home

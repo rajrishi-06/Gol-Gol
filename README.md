@@ -28,8 +28,9 @@ ratings, receipts, driver earnings and a safety toolkit — all from a browser.
 > bootstrap and an end-to-end test path. `docs/FEATURE_ANALYSIS.md` is the audit
 > behind the current design.
 >
-> **Looking ahead?** `docs/POOLING_ARCHITECTURE.md` is a proposal — not built yet —
-> for unified rider/driver modes, en-route pooling and adaptive vehicle capacity.
+> **Sharing rides?** `docs/POOLING_ARCHITECTURE.md` covers en-route pooling and
+> adaptive seat capacity — both built. `sudo ./supabase/tests/run.sh` applies every
+> migration to a throwaway Postgres and asserts the whole flow.
 
 ---
 

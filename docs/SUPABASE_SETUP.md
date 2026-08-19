@@ -9,15 +9,18 @@ Follow top to bottom for a fresh project. Your current project ref is
 `pg-delta` "failed to cache migrations catalog" warning is **non-fatal** — every
 `Applying migration ...` line succeeded.
 
-### ⚠️ Two newer migrations must be applied
+### ⚠️ Three newer migrations must be applied
 
 ```
 supabase/migrations/0005_production_platform.sql
 supabase/migrations/0006_tighten_driver_reads.sql
+supabase/migrations/0007_pooling.sql
 ```
 
 Run `supabase db push` again, or paste each file into the SQL editor **in
-order**. Both are idempotent, so re-running them is safe. Between them they:
+order**. All three are idempotent, so re-running them is safe. No extensions
+are required — `0007` does its geometry in plain SQL rather than PostGIS.
+Between them they:
 
 - fix the vehicle taxonomy so Mini/Sedan/SUV rides can be dispatched at all;
 - close the RLS holes (anonymous phone-number enumeration, world-readable driver
