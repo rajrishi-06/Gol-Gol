@@ -11,6 +11,7 @@ import {
   createImageMarker,
   createVehicleMarker,
   drawRoutePolyline,
+  drawProgressPolyline,
   boundsFrom,
 } from "../../lib/googlemaps";
 import { fetchRoute } from "../../lib/geocoding";
@@ -47,6 +48,7 @@ function TrackingMap({ ride, driverLocation, vehicleType, onBack }) {
   const pickupMarker = useRef(null);
   const destMarker = useRef(null);
   const routeRef = useRef(null);
+  const progressRef = useRef(null);
   const lastRouted = useRef(null);
   const fitted = useRef(false);
   const [mapReady, setMapReady] = useState(false);
@@ -169,6 +171,48 @@ function TrackingMap({ ride, driverLocation, vehicleType, onBack }) {
       cancelled = true;
     };
   }, [mapReady, driverLocation, target]);
+
+  // ── how far along the trip we are ──────────────────────────────────────────
+  //
+  // The line above is the route *ahead* of the driver, redrawn as they move.
+  // During the ride itself that answers "where next" but not "how far have we
+  // come", which is the question someone actually stares at this screen to
+  // answer — a marker crawling along an undifferentiated line reads the same
+  // whether you are a third of the way or stuck.
+  //
+  // So on `ongoing` we draw the whole trip once and split it at the vehicle.
+  useEffect(() => {
+    if (!mapReady || ride.status !== "ongoing") {
+      progressRef.current?.remove();
+      progressRef.current = null;
+      return undefined;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const full = await fetchRoute([
+          [ride.from_lng, ride.from_lat],
+          [ride.to_lng, ride.to_lat],
+        ]);
+        if (cancelled || !full?.geometry || !mapRef.current) return;
+        progressRef.current?.remove();
+        progressRef.current = drawProgressPolyline(mapRef.current, full.geometry.coordinates);
+      } catch {
+        /* progress shading is non-critical */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [mapReady, ride.status, ride.from_lat, ride.from_lng, ride.to_lat, ride.to_lng]);
+
+  // Re-split on every fix; walking a few hundred points is cheaper than
+  // re-fetching a route we already have.
+  useEffect(() => {
+    if (driverLocation) progressRef.current?.update(driverLocation);
+  }, [driverLocation]);
+
+  useEffect(() => () => progressRef.current?.remove(), []);
 
   // Fit both points the first time we have them.
   useEffect(() => {

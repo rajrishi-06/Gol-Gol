@@ -74,7 +74,9 @@ export function useRideLive(rideId, { withChat = true } = {}) {
     let chatChannel = null;
     if (withChat) {
       chatChannel = supabase
-        .channel(`ride-chat:${rideId}:${suffix}`)
+        // Private: joining is checked against RLS on `realtime.messages`, so only
+        // the two people on this ride can read or post to it.
+        .channel(`ride-chat:${rideId}:${suffix}`, { config: { private: true } })
         .on(
           "postgres_changes",
           { event: "INSERT", schema: "public", table: "chat_messages", filter: `ride_id=eq.${rideId}` },

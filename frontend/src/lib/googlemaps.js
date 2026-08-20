@@ -203,6 +203,63 @@ export function drawRoutePolyline(map, coordinates, { color = "#0f9b7f", width =
   return line;
 }
 
+/**
+ * Split a route into the part already driven and the part still to go.
+ *
+ * The rider watching a marker crawl along an undifferentiated line cannot tell
+ * progress from drift. Two polylines — travelled dimmed, remaining bright —
+ * make "we are two thirds of the way" readable at a glance, which is the whole
+ * question someone stares at this screen to answer.
+ *
+ * Returns `{ update(position), remove() }`. Cheap enough to call on every GPS
+ * fix: it walks the path once to find the nearest segment, which for a city
+ * route is a few hundred points.
+ */
+export function drawProgressPolyline(map, coordinates, { done = "#9aa3ae", left = "#0f9b7f", width = 6 } = {}) {
+  const g = window.google.maps;
+  const path = toPath(coordinates);
+  if (path.length < 2) return { update() {}, remove() {} };
+
+  const travelled = new g.Polyline({
+    map, path: [], strokeColor: done, strokeWeight: width, strokeOpacity: 0.45,
+  });
+  const remaining = new g.Polyline({
+    map, path, strokeColor: left, strokeWeight: width, strokeOpacity: 0.9,
+  });
+
+  // Equirectangular at city scale — the same approximation the corridor maths
+  // uses server-side, and for "which segment am I on" it is exact enough.
+  const nearestIndex = (p) => {
+    let best = 0;
+    let bestD = Infinity;
+    const k = Math.cos((p.lat * Math.PI) / 180);
+    for (let i = 0; i < path.length; i++) {
+      const dx = (path[i].lng - p.lng) * k;
+      const dy = path[i].lat - p.lat;
+      const d = dx * dx + dy * dy;
+      if (d < bestD) {
+        bestD = d;
+        best = i;
+      }
+    }
+    return best;
+  };
+
+  return {
+    update(position) {
+      if (!position || !Number.isFinite(position.lat)) return;
+      const i = nearestIndex(position);
+      // The join point is the vehicle itself, so neither line ends short of it.
+      travelled.setPath([...path.slice(0, i + 1), position]);
+      remaining.setPath([position, ...path.slice(i + 1)]);
+    },
+    remove() {
+      travelled.setMap(null);
+      remaining.setMap(null);
+    },
+  };
+}
+
 /** Build a LatLngBounds from `{lat,lng}` points. */
 export function boundsFrom(points = []) {
   const g = window.google.maps;

@@ -22,6 +22,12 @@ create or replace function auth.uid() returns uuid language sql stable as $$
   select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid;
 $$;
 
+-- Supabase grants these; the shim has to as well, or a test that drops to the
+-- `authenticated` role to exercise RLS cannot even resolve auth.uid().
+grant usage on schema auth to authenticated, anon;
+grant execute on function auth.uid() to authenticated, anon;
+grant usage on schema public to authenticated, anon;
+
 create or replace function test_as(p uuid) returns void language sql as $$
   select set_config('request.jwt.claim.sub', coalesce(p::text, ''), false);
 $$;
@@ -52,6 +58,11 @@ end $$;
 
 create or replace function near(a double precision, b double precision, tol double precision default 0.05)
 returns boolean language sql immutable as $$ select abs(a - b) <= tol $$;
+
+-- The counter has to be writable from whatever role a test drops into: the
+-- RLS checks run as `authenticated`, and an assertion that cannot count itself
+-- is an assertion that does not run.
+grant select, insert, update on _assertions to authenticated, anon;
 
 create or replace function expect(want integer) returns void language plpgsql as $$
 declare got integer;

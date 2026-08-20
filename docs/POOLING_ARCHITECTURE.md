@@ -793,7 +793,8 @@ supabase/migrations/0007_pooling.sql   trips, stops, matching, capacity
 supabase/migrations/0008_seat_holds.sql seat holds + the detour audit
 supabase/migrations/0009_roles_and_chaining.sql  mode + sequential chaining
 supabase/migrations/0010_scoring_batch_and_gaps.sql  scoring, batching, the rest
-supabase/tests/run.sh                  applies every migration, runs 97 assertions
+supabase/migrations/0011_women_only_and_private_channels.sql  women-only + channel RLS
+supabase/tests/run.sh                  applies every migration, runs 109 assertions
 frontend/src/lib/pooling.js            RPC wrappers + local previews of the arithmetic
 frontend/src/components/ride/SeatPicker.jsx        seats + the sharing consent gate
 frontend/src/components/ride/SharedRideBanner.jsx  what the rider is told
@@ -959,9 +960,53 @@ fare, at a place they never got out. A four-digit code from the rider closes
 that, and it is issued only on pooled trips because a solo ride has nothing to
 confuse.
 
+### Women-only pooling — shipped in `0011`
+
+Enforced in the candidate query and re-checked under the lock on accept, exactly
+as §9 required. A client-side filter shows the rider a shorter list; it does not
+stop the server offering their ride to anyone.
+
+**The rule is symmetric.** It is not "women-only riders travel together" — it is:
+for any two people sharing a vehicle, if *either* asked for it, both must be
+women. A rider who never asked is still bound by the request of the rider already
+aboard, and a woman who asked is not matched onto a mixed trip. Protecting only
+the person who ticked the box protects nobody.
+
+**Gender is not a column on `users`.** Postgres RLS is row-level, and `users`
+rows are readable by ride counterparties — a column there would hand every driver
+and co-passenger the gender of everyone they ride with. It lives in
+`user_safety_prefs`, readable only by its owner, and the matching functions read
+it as `SECURITY DEFINER`. It appears in no projection, including the co-passenger
+list a rider sees.
+
+Only a rider who has declared themselves a woman may set the flag; anyone else
+setting it has it **silently cleared** rather than refused, so the client cannot
+use the error to probe what the server thinks someone's gender is. Otherwise the
+control is a way to filter other people by gender, which is the opposite of a
+safety feature.
+
+### Live channels are authorized — `0011`
+
+The driver's GPS broadcast has been an **open channel** since the beginning. The
+original audit called it out and the code comment agreed: anyone who learned a
+ride's UUID could subscribe and watch that driver move — and ride UUIDs are not
+secret, they travel in URLs, share links and notification payloads.
+
+All three ride channels (`ride-location:`, `ride-chat:`, `ride-presence:`) now
+join with `private: true`, checked against RLS policies on `realtime.messages`:
+
+- **Location** — readable by the rider and the assigned driver; writable **only**
+  by the driver, and only while the ride is live. Without the write rule a rider
+  could broadcast a fake position on their own ride's topic, which is worse than
+  the leak it replaces.
+- **Chat and presence** — both parties, both directions. Presence says who is on
+  a ride and when they are looking at it, which is the same class of information
+  the location channel used to hand out.
+
+The policies are guarded on the `realtime` schema existing, so the migration is a
+no-op on a stock Postgres — which is how the suite proves the chain applies.
+**They therefore cannot be tested here**; they need a real project.
+
 ### Still open
 
-Nothing from the build order. What remains is a product decision, not an
-engineering one: **women-only pooling** (§9) is specified as *"if you offer it,
-enforce it in the candidate query rather than filtering in the client"* — the
-enforcement point is ready, the decision to offer it is yours.
+Nothing from the design.

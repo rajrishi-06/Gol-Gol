@@ -1,4 +1,4 @@
-import { MapPin, Clock, Route, IndianRupee, X, Users } from "lucide-react";
+import { MapPin, Clock, Route, IndianRupee, X, Users, ShieldCheck } from "lucide-react";
 import { formatCurrency, formatDistance, formatDuration } from "../../lib/format";
 import Card from "../ui/Card";
 import Button from "../ui/Button";
@@ -32,6 +32,14 @@ export default function PoolOfferCard({ offer, onAccept, onDismiss, busy, second
           <Badge tone={chained ? "brand" : "success"}>
             {chained ? "Next fare" : "On your way"}
           </Badge>
+          {/* The driver sees that the booking carries the constraint, not who
+              it applies to — the server already decided they qualify. */}
+          {offer.women_only && (
+            <Badge tone="neutral">
+              <ShieldCheck className="mr-1 inline h-3 w-3" />
+              Women only
+            </Badge>
+          )}
           {Number.isFinite(secondsLeft) && secondsLeft > 0 && (
             <span className="text-xs tabular-nums text-muted">{secondsLeft}s</span>
           )}

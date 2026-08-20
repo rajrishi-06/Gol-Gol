@@ -8,6 +8,7 @@ import Page from "../components/layout/Page";
 import Card from "../components/ui/Card";
 import Button from "../components/ui/Button";
 import Switch from "../components/ui/Switch";
+import { mySafetyPrefs, setSafetyPrefs } from "../lib/pooling";
 import Alert from "../components/ui/Alert";
 import { Select } from "../components/ui/Field";
 import { cn } from "../lib/cn";
@@ -34,6 +35,29 @@ function Section({ title, description, children }) {
  * app was the theme toggle in the navbar.
  */
 export default function Settings() {
+  const [prefs, setPrefs] = useState(null);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const { data } = await mySafetyPrefs();
+      if (active) setPrefs(data);
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const savePref = async (patch) => {
+    const next = { ...prefs, ...patch };
+    setPrefs(next);
+    const { error } = await setSafetyPrefs({
+      gender: next.gender ?? null,
+      womenOnlyDefault: next.women_only_default ?? false,
+    });
+    if (error) toast.error("Couldn't save that.");
+  };
+
   const { settings, updateSettings, userId } = useAuth();
   const [theme, setThemeState] = useState(getInitialTheme);
   const [perm, setPerm] = useState(() => pushPermission());
@@ -141,6 +165,55 @@ export default function Settings() {
             checked={settings?.share_trip_default ?? false}
             onChange={(v) => toggle("share_trip_default", v)}
           />
+        </Section>
+
+        <Section
+          title="Sharing"
+          description="Only used to decide who you share a vehicle with. Never shown to your driver or anyone you ride with."
+        >
+          <fieldset>
+            <legend className="text-sm font-medium text-foreground">Gender</legend>
+            <p className="mt-0.5 text-xs text-muted">
+              Optional. Leave it unset if you&apos;d rather not say — everything works
+              the same either way.
+            </p>
+            <div role="radiogroup" aria-label="Gender" className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {[
+                { id: null, label: "Not set" },
+                { id: "female", label: "Woman" },
+                { id: "male", label: "Man" },
+                { id: "other", label: "Other" },
+              ].map((o) => {
+                const active = (prefs?.gender ?? null) === o.id;
+                return (
+                  <button
+                    key={o.label}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    onClick={() => savePref({ gender: o.id })}
+                    className={cn(
+                      "rounded-xl border px-3 py-2.5 text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+                      active
+                        ? "border-primary bg-primary-subtle text-primary-subtle-fg"
+                        : "border-border bg-surface text-muted hover:text-foreground"
+                    )}
+                  >
+                    {o.label}
+                  </button>
+                );
+              })}
+            </div>
+          </fieldset>
+
+          {prefs?.gender === "female" && (
+            <Switch
+              label="Share with women only"
+              description="Default for new bookings. You can change it per ride."
+              checked={prefs?.women_only_default ?? false}
+              onChange={(v) => savePref({ women_only_default: v })}
+            />
+          )}
         </Section>
 
         <Section title="Appearance">

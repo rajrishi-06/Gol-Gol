@@ -92,15 +92,19 @@ map draws the driver marker, the live route and an ETA, re-routing when the driv
 moves > 150 m. Recenter control, back button.
 
 **Problems**
-- The broadcast channel is **unauthenticated** — anyone who learns a ride UUID can
-  subscribe to that driver's live position. The code comments admit this
-  ("For production, promote this to an RLS-authorized private channel").
+- ~~The broadcast channel is **unauthenticated**~~ — **fixed in `0011`**. All three
+  ride channels now join with `private: true` and are checked against RLS on
+  `realtime.messages`: the location topic is readable by the two parties and
+  writable only by the assigned driver, while the ride is live.
 - The ETA is computed **only on the rider's device**. The driver sees a different
   number from their own navigation, and neither is stored, so nothing else in the
   app (notifications, the home screen, support) knows the ETA.
 - No "driver has arrived" detection — the rider gets no signal when the car is
   outside.
-- No trip progress on the map during the ride (no travelled-vs-remaining polyline).
+- ~~No trip progress on the map during the ride~~ — **fixed**. On `ongoing` the
+  full route is drawn once and split at the vehicle: travelled dimmed, remaining
+  bright. A marker crawling along an undifferentiated line reads the same whether
+  you are a third of the way or stuck.
 
 ### 1.5 Turn-by-turn navigation (driver)
 **Implemented** — Full-screen `NavigationView` with a maneuver banner, step

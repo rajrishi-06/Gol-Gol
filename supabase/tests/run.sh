@@ -22,7 +22,7 @@ trap 'rm -rf "$STAGE"; su postgres -c "psql -q -c \"drop database if exists $RUN
 cp "$MIG"/*.sql "$HERE"/*.sql "$STAGE"/
 chmod -R a+rX "$STAGE"
 
-TESTS=(01_geometry.sql 02_pooling_flow.sql 03_seat_holds.sql 04_roles_and_chaining.sql 05_scoring_batch_gaps.sql)
+TESTS=(01_geometry.sql 02_pooling_flow.sql 03_seat_holds.sql 04_roles_and_chaining.sql 05_scoring_batch_gaps.sql 06_women_only.sql)
 
 sql() { su postgres -c "psql -v ON_ERROR_STOP=1 -q -d $1 -f $STAGE/$2" 2>&1 \
         | grep -v '^psql.*NOTICE:  \(relation\|constraint\|trigger\|column\|extension\|table\|database\)'; }

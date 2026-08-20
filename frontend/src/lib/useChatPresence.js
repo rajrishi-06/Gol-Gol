@@ -22,7 +22,10 @@ export function useChatPresence(rideId, userId) {
     if (!rideId || !userId) return undefined;
 
     const channel = supabase.channel(`ride-presence:${rideId}`, {
-      config: { presence: { key: userId } },
+      // Private, like the other two ride channels: presence leaks who is on a
+      // ride and when, which is the same information the location channel used
+      // to hand out. `private` belongs inside `config`, next to `presence`.
+      config: { presence: { key: userId }, private: true },
     });
 
     const readState = () => {

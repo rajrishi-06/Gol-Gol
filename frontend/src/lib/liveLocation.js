@@ -7,8 +7,15 @@ import { supabase } from "./supabase";
  * position via a throttled write, so a rider opening the screen sees the driver
  * immediately, before the next broadcast arrives.
  *
- * The channel is keyed by the ride UUID, which only the rider and driver know.
- * For a hardened deployment, promote this to an RLS-authorized private channel.
+ * The channel is **private**: Supabase checks every join and every publish
+ * against RLS policies on `realtime.messages` (migration 0011). Only the rider
+ * and the assigned driver may listen, and only the driver may publish, and only
+ * while the ride is live.
+ *
+ * It used to be an open channel keyed by the ride UUID, on the reasoning that
+ * only the two parties knew it. They are not the only ones: ride UUIDs travel in
+ * URLs, share links and notification payloads, and anyone who learned one could
+ * watch that driver move.
  */
 const channelName = (rideId) => `ride-location:${rideId}`;
 
@@ -18,7 +25,7 @@ export function publishRideLocation(rideId) {
   let pending = null;
 
   const channel = supabase.channel(channelName(rideId), {
-    config: { broadcast: { self: false } },
+    config: { broadcast: { self: false }, private: true },
   });
 
   const push = (loc) => channel.send({ type: "broadcast", event: "loc", payload: loc });
@@ -57,7 +64,7 @@ export function publishRideLocation(rideId) {
 /** Rider side: subscribe to the driver's live position. Returns an unsubscribe fn. */
 export function subscribeRideLocation(rideId, onLocation) {
   const channel = supabase
-    .channel(channelName(rideId), { config: { broadcast: { self: false } } })
+    .channel(channelName(rideId), { config: { broadcast: { self: false }, private: true } })
     .on("broadcast", { event: "loc" }, ({ payload }) => {
       if (payload && Number.isFinite(payload.lat) && Number.isFinite(payload.lng)) {
         onLocation({ lat: payload.lat, lng: payload.lng });

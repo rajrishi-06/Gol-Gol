@@ -30,6 +30,7 @@ export async function createRide({
   scheduledFor = null,
   seats = 1,
   shareable = false,
+  womenOnly = false,
 }) {
   return supabase
     .from("rides")
@@ -47,6 +48,9 @@ export async function createRide({
       scheduled_for: scheduledFor,
       seats,
       shareable,
+      // The server re-checks this against the rider's own declared gender and
+      // silently clears it otherwise, so it can never be used to filter others.
+      women_only: womenOnly,
       status: "pending",
     })
     .select()

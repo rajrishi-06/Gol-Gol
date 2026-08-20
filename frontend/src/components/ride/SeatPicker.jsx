@@ -1,4 +1,4 @@
-import { Users } from "lucide-react";
+import { Users, ShieldCheck } from "lucide-react";
 import { maxSeatsFor, canShare, fareForSeats } from "../../lib/pooling";
 import { formatCurrency } from "../../lib/format";
 import { cn } from "../../lib/cn";
@@ -24,6 +24,12 @@ export default function SeatPicker({
   onShareableChange,
   oneSeatFare,
   discountPct = 20,
+  // Only offered to riders who have said they are women — otherwise the
+  // control is a way to filter other people by gender, which is the opposite
+  // of a safety feature. The server enforces the same rule regardless.
+  canRequestWomenOnly = false,
+  womenOnly = false,
+  onWomenOnlyChange,
 }) {
   const capacity = maxSeatsFor(vehicleType);
   const shareAllowed = canShare(vehicleType);
@@ -78,6 +84,22 @@ export default function SeatPicker({
             label="Open to sharing"
             description={`We may pick up one more passenger going your way. Get ${discountPct}% back if we match you — you pay full fare if we don't.`}
           />
+        </div>
+      )}
+
+      {shareAllowed && shareable && canRequestWomenOnly && (
+        <div className="rounded-xl border border-border bg-surface p-3.5">
+          <Switch
+            checked={womenOnly}
+            onChange={onWomenOnlyChange}
+            label="Share with women only"
+            description="We'll only match you with other women. Fewer matches, so it may take longer to find one."
+          />
+          <p className="mt-2 flex items-start gap-1.5 text-[0.7rem] text-subtle">
+            <ShieldCheck className="mt-0.5 h-3 w-3 shrink-0" />
+            Checked on our side when a driver is offered your ride — not filtered
+            on your phone.
+          </p>
         </div>
       )}
 

@@ -116,6 +116,26 @@ export const verifyDrop = (rideId, otp) => rpc("verify_drop", { p_ride_id: rideI
 /** Requests along a driver's declared way home, while they are still empty. */
 export const headingHomeRides = (limit = 5) => rpc("heading_home_rides", { p_limit: limit });
 
+// ── safety preferences ──────────────────────────────────────────────────────
+
+/**
+ * Gender is optional, self-declared, and lives in a table only its owner can
+ * read — not a column on `users`, whose rows are visible to ride counterparties.
+ * The matching functions read it as SECURITY DEFINER, so it decides who shares a
+ * vehicle without ever appearing in a projection.
+ */
+export const mySafetyPrefs = async () => {
+  const { data, error } = await rpc("my_safety_prefs", {});
+  if (error) return { data: null, error };
+  return { data: Array.isArray(data) ? data[0] ?? null : data ?? null, error: null };
+};
+
+export const setSafetyPrefs = ({ gender, womenOnlyDefault } = {}) =>
+  rpc("set_safety_prefs", {
+    p_gender: gender ?? null,
+    p_women_only_default: womenOnlyDefault ?? null,
+  });
+
 // ── operations ──────────────────────────────────────────────────────────────
 
 /** The six numbers from the design that say whether pooling is working. */

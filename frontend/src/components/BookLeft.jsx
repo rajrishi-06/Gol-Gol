@@ -6,7 +6,7 @@ import { supabase } from "../lib/supabase";
 import { useAuth } from "../lib/auth.jsx";
 import { useBooking } from "../lib/booking.jsx";
 import { cancelRide, createRide, expireStaleRides } from "../lib/rides";
-import { canShare, fareForSeats, maxSeatsFor } from "../lib/pooling";
+import { canShare, fareForSeats, maxSeatsFor, mySafetyPrefs } from "../lib/pooling";
 import { distanceKm, hasValidCoords } from "../lib/geo";
 import { reverseGeocode } from "../lib/geocoding";
 import { estimateFare, getRideType } from "../lib/vehicles";
@@ -84,6 +84,23 @@ export default function BookLeft() {
   // up nothing by leaving it on — the rebate is paid on match, and a ride that
   // never matches is the ride they booked.
   const [shareable, setShareable] = useState(trip.shareable ?? true);
+  const [prefs, setPrefs] = useState(null);
+  const [womenOnly, setWomenOnly] = useState(false);
+
+  // The standing preference is the default; the toggle below overrides it for
+  // this booking only.
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const { data } = await mySafetyPrefs();
+      if (!active) return;
+      setPrefs(data);
+      if (data?.gender === "female" && data.women_only_default) setWomenOnly(true);
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const [phase, setPhase] = useState("review"); // review | searching | scheduled | nodrivers
   const [rideId, setRideId] = useState(null);
@@ -179,6 +196,7 @@ export default function BookLeft() {
       pickupNotes: notes,
       seats: effectiveSeats,
       shareable: effectiveShare,
+      womenOnly: effectiveShare && womenOnly,
     });
 
     const { data, error } = await createRide({
@@ -193,6 +211,7 @@ export default function BookLeft() {
       scheduledFor: trip.scheduledFor,
       seats: effectiveSeats,
       shareable: effectiveShare,
+      womenOnly: effectiveShare && womenOnly,
     });
     setBusy(false);
 
@@ -365,6 +384,9 @@ export default function BookLeft() {
             shareable={effectiveShare}
             onShareableChange={setShareable}
             oneSeatFare={fare.total}
+            canRequestWomenOnly={prefs?.gender === "female"}
+            womenOnly={womenOnly}
+            onWomenOnlyChange={setWomenOnly}
           />
         </Card>
 
