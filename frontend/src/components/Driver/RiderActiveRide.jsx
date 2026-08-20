@@ -460,7 +460,7 @@ export default function RiderActiveRide() {
 
         {(pool?.pooled || pool?.shareable) && (
           <div className="mt-4">
-            <SharedRideBanner context={pool} />
+            <SharedRideBanner context={pool} rideId={rideId} />
           </div>
         )}
 

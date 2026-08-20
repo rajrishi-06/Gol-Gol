@@ -3,15 +3,6 @@
 \set QUIET on
 \timing off
 
-create or replace function chk(label text, got anyelement, want anyelement) returns void
-language plpgsql as $$
-begin
-  if got is not distinct from want then
-    raise notice 'PASS  % (%)', label, got;
-  else
-    raise notice 'FAIL  % — got %, wanted %', label, got, want;
-  end if;
-end $$;
 
 -- ── cast ────────────────────────────────────────────────────────────────────
 insert into auth.users (id, phone, raw_user_meta_data) values
@@ -171,3 +162,6 @@ exception when others then raise notice 'PASS  full auto refuses (%)', sqlerrm;
 end $$;
 select chk('seats available reads zero', public.trip_seats_available(id), 0::smallint)
   from public.trips where status='active';
+
+\echo ''
+select expect(29);

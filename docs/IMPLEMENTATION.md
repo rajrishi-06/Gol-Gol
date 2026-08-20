@@ -7,7 +7,7 @@ Pairs with `docs/FEATURE_ANALYSIS.md` (the audit that motivated it).
 
 ## 1. Setup — read this before testing
 
-Five SQL migrations must be applied on top of the existing schema:
+Six SQL migrations must be applied on top of the existing schema:
 
 ```
 supabase/migrations/0005_production_platform.sql
@@ -15,10 +15,11 @@ supabase/migrations/0006_tighten_driver_reads.sql
 supabase/migrations/0007_pooling.sql
 supabase/migrations/0008_seat_holds.sql
 supabase/migrations/0009_roles_and_chaining.sql
+supabase/migrations/0010_scoring_batch_and_gaps.sql
 ```
 
 Either `supabase db push`, or paste each file into the Supabase SQL editor and
-run it (in order). All five are idempotent — re-running them is safe. None of them
+run it (in order). All six are idempotent — re-running them is safe. None of them
 need extensions: the pooling geometry is plain trigonometry, so there is
 nothing to enable on the project.
 
@@ -29,7 +30,7 @@ sudo ./supabase/tests/run.sh
 ```
 
 That builds a throwaway local Postgres, applies every migration in order, and
-runs 85 assertions over the pooling flow. It is what caught the fact that
+runs 97 assertions over the pooling flow. It is what caught the fact that
 `0005` used to change `nearby_pending_rides`'s return type without dropping it
 first, which made a clean `0003 → 0005` chain fail outright.
 

@@ -2,12 +2,6 @@
 \pset pager off
 \set QUIET on
 
-create or replace function chk(label text, got anyelement, want anyelement) returns void
-language plpgsql as $$
-begin
-  if got is not distinct from want then raise notice 'PASS  % (%)', label, got;
-  else raise notice 'FAIL  % — got %, wanted %', label, got, want; end if;
-end $$;
 
 -- two drivers, one shared corridor, one contested request
 insert into auth.users (id, phone, raw_user_meta_data) values
@@ -135,3 +129,6 @@ select chk('and the rider is told', count(*), 1::bigint)
 select round(fare) quoted, round(pool_discount) rebate, breach_credit credit, round(final_fare) paid,
        promised_detour_min promised, actual_detour_min actual
   from public.rides where id=current_setting('t.a')::uuid;
+
+\echo ''
+select expect(22);

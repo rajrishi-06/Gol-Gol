@@ -5,6 +5,7 @@ import { adminPendingDrivers, setDriverVerification } from "../lib/rides";
 import { formatDate } from "../lib/format";
 import { cn } from "../lib/cn";
 import Page from "../components/layout/Page";
+import PoolingMetrics from "../components/PoolingMetrics";
 import Card from "../components/ui/Card";
 import Badge from "../components/ui/Badge";
 import Button from "../components/ui/Button";
@@ -109,6 +110,10 @@ export default function AdminDrivers() {
         </button>
       }
     >
+      <div className="mb-6">
+        <PoolingMetrics />
+      </div>
+
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <div role="group" aria-label="Filter" className="flex gap-1 rounded-xl border border-border bg-surface-2 p-1">
           {FILTERS.map((f) => (

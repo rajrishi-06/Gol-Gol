@@ -98,6 +98,29 @@ export const setUserMode = (mode, dest = null) =>
 
 export const currentMode = () => rpc("current_mode", {});
 
+// ── drop verification ───────────────────────────────────────────────────────
+
+/**
+ * The rider's four-digit code for getting out.
+ *
+ * Only issued on pooled trips. With one rider "completed" is unambiguous; with
+ * three aboard a driver can close the wrong booking, ending someone's trip —
+ * and their fare — somewhere they never got out.
+ */
+export const issueDropOtp = (rideId) => rpc("issue_drop_otp", { p_ride_id: rideId });
+
+export const verifyDrop = (rideId, otp) => rpc("verify_drop", { p_ride_id: rideId, p_otp: otp });
+
+// ── heading home ────────────────────────────────────────────────────────────
+
+/** Requests along a driver's declared way home, while they are still empty. */
+export const headingHomeRides = (limit = 5) => rpc("heading_home_rides", { p_limit: limit });
+
+// ── operations ──────────────────────────────────────────────────────────────
+
+/** The six numbers from the design that say whether pooling is working. */
+export const poolingMetrics = (days = 7) => rpc("pooling_metrics", { p_days: days });
+
 /** Modes in which the app should be showing the driving side of the house. */
 export const DRIVING_MODES = ["available", "on_trip", "heading_home"];
 

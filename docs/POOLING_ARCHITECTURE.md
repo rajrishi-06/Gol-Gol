@@ -1,7 +1,8 @@
 # Pooling, unified roles and adaptive capacity — architecture spec
 
-**Status:** P0 through P4 are **implemented** across migrations `0007`–`0009`
-and the frontend. P5 (batch matching) is deliberately not built — see §11.
+**Status:** the whole build order — P0 through P5 — is **implemented** across
+migrations `0007`–`0010` and the frontend. Batch matching ships **switched off**;
+see §11 for why turning it on is a volume decision rather than a deploy.
 **Companion:** a narrative version of this plan, with diagrams, is published as
 an artifact for review.
 
@@ -516,7 +517,12 @@ score = w₁·(shared_km / new_booking_km)         -- overlap: the core signal
       − w₅·(new_rider_wait_minutes)
 ```
 
-Weights live in a `matching_weights` table keyed by city, not in code.
+Weights live in `matching_weights`, keyed by city with a `default` row every
+city falls back to, and `poolable_rides` orders by `pool_score(...)`.
+
+**This was specified from the start and shipped late.** Until `0010` the funnel
+ordered by added distance alone — one of the five signals — which prefers a match
+that saves the driver a kilometre over one that shares fifteen.
 
 The best match is offered to the driver with a countdown; the seat is held by a
 `seat_holds` row with a TTL so no second dispatcher can sell it while they decide.
@@ -715,20 +721,26 @@ occupants, and the proactive re-dispatch of §4.4.
 Touches: `occupancy_events`, `confirm_pickup_headcount`,
 `confirm_extra_occupant`, `amend_booking_seats`, driver pickup screen.
 
-### P5 — Batch matching & tuning — deliberately not built
-Hold requests in a short window and solve jointly; per-city scoring weights;
-interaction with surge.
+### P5 — Batch matching & tuning ✅ shipped, switched off
 
-This is the one phase left undone on purpose rather than for lack of time. It is
-the single largest quality lever in pooling **and** the one that only pays off
-once there is enough concurrent demand to batch: with a handful of requests in
-flight, a 3–5 second holding window costs every rider that delay and buys
-assignments no better than greedy matching already produces. Building it now
-would optimise a market that does not exist yet, and would add a latency floor
-to every booking to do it.
+`match_queue` holds shareable requests for `pool_config.batch_window_seconds`,
+and `run_batch_match()` scores every (request, trip) pair that survives the same
+gates as the per-arrival funnel. `apply_batch_match()` then assigns best-first
+across the whole batch, so the strongest pairing is made first regardless of
+which request arrived earliest — which is the entire difference from greedy.
 
-Worth revisiting when the match rate and concurrent-request volume in §12 say the
-window would actually have something to choose between.
+Best-first over all pairs is **not** the optimal assignment; that is a transport
+problem, and solving it exactly in plpgsql would be the wrong place and the wrong
+cost. It captures most of the gain, and the ceiling is written down in the
+function rather than implied.
+
+**The window defaults to 0, which routes everything down the existing
+per-arrival path.** With a handful of requests in flight, a 3–5 second hold costs
+every rider that delay and produces the assignment greedy already would. Turning
+it on is a decision to make when §12's match rate and concurrent volume say the
+window would have something to choose between — not a deploy.
+
+Per-city scoring weights ship with it; see §5.
 
 ---
 
@@ -780,7 +792,8 @@ but they are calls for the product owner, not for engineering.
 supabase/migrations/0007_pooling.sql   trips, stops, matching, capacity
 supabase/migrations/0008_seat_holds.sql seat holds + the detour audit
 supabase/migrations/0009_roles_and_chaining.sql  mode + sequential chaining
-supabase/tests/run.sh                  applies every migration, runs 85 assertions
+supabase/migrations/0010_scoring_batch_and_gaps.sql  scoring, batching, the rest
+supabase/tests/run.sh                  applies every migration, runs 97 assertions
 frontend/src/lib/pooling.js            RPC wrappers + local previews of the arithmetic
 frontend/src/components/ride/SeatPicker.jsx        seats + the sharing consent gate
 frontend/src/components/ride/SharedRideBanner.jsx  what the rider is told
@@ -825,6 +838,8 @@ without a deploy:
 | `breach_cap_pct` | 25 | ceiling on that credit, as a share of the fare |
 | `chain_lead_km` | 6 | how close to finishing before the next fare is offered |
 | `chain_radius_km` | 4 | how far a chained pickup may be from where the driver finishes |
+| `batch_window_seconds` | **0** | how long to hold requests before solving the batch; 0 disables batching |
+| `city` | `default` | which `matching_weights` row applies |
 
 ### Seat holds — shipped in `0008`
 
@@ -915,6 +930,38 @@ queued summed to 2 and tripped the check constraint. The honest figure is peak
 occupancy along the route: identical to the sum when spans overlap, and the
 largest single booking when they do not.
 
+### The specified pieces that shipped in `0010`
+
+An audit of this document against the code turned up six things the design named
+and the code never grew. All are now built:
+
+| Section | What was missing |
+|---|---|
+| §5 | the five-term score and its per-city weights table |
+| §8 | an idempotency key on accept, so a retry returns the original result |
+| §8 | a trigger that **rejects** an impossible stop order rather than repairing it |
+| §9 | drop verification on pooled trips |
+| §9 | `block_co_passenger` had no caller — the rider projection returned a first name, and you cannot block a first name |
+| §3 | `heading_home` was accepted and stored since `0009` but nothing matched against it |
+| §12 | the metrics |
+
+Two are worth reading about.
+
+**Stop order.** `trip_fix_pair` quietly swaps a drop that sorted before its own
+pickup. That is the right repair at insertion, but it meant a bug elsewhere could
+write nonsense and have it tidied away. `trg_trip_stops_order` now raises. It is
+a *deferred* constraint trigger, because `trip_place_stops` renumbers the whole
+sequence in one statement and legitimately passes through intermediate states.
+
+**Drop verification.** With one rider, "completed" is unambiguous. With three
+aboard, a driver can close the wrong booking — ending someone's trip, and their
+fare, at a place they never got out. A four-digit code from the rider closes
+that, and it is issued only on pooled trips because a solo ride has nothing to
+confuse.
+
 ### Still open
 
-Nothing from the build order except P5, above, which is deliberate.
+Nothing from the build order. What remains is a product decision, not an
+engineering one: **women-only pooling** (§9) is specified as *"if you offer it,
+enforce it in the candidate query rather than filtering in the client"* — the
+enforcement point is ready, the decision to offer it is yours.

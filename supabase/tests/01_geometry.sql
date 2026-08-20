@@ -2,15 +2,7 @@
 \pset pager off
 \set QUIET on
 
-create or replace function chk(label text, got anyelement, want anyelement) returns void
-language plpgsql as $$
-begin
-  if got is not distinct from want then raise notice 'PASS  % (%)', label, got;
-  else raise notice 'FAIL  % — got %, wanted %', label, got, want; end if;
-end $$;
 
-create or replace function near(a double precision, b double precision, tol double precision default 0.05)
-returns boolean language sql immutable as $$ select abs(a - b) <= tol $$;
 
 \set QUIET off
 \echo ''
@@ -54,3 +46,6 @@ select chk('a 2 km off-corridor pickup costs 0.92 km of diagonal',
 select chk('a degenerate path yields nothing rather than an error',
            (select along_km from path_locate(array[12.97], array[77.50], 12.97, 77.55)),
            null::double precision);
+
+\echo ''
+select expect(8);

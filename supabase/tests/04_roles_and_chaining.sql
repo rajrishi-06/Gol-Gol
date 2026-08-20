@@ -2,12 +2,6 @@
 \pset pager off
 \set QUIET on
 
-create or replace function chk(label text, got anyelement, want anyelement) returns void
-language plpgsql as $$
-begin
-  if got is not distinct from want then raise notice 'PASS  % (%)', label, got;
-  else raise notice 'FAIL  % — got %, wanted %', label, got, want; end if;
-end $$;
 
 insert into auth.users (id, phone, raw_user_meta_data) values
   ('c0000000-0000-4000-8000-000000000001','+919300000001','{"name":"Both Ways"}'),
@@ -142,3 +136,6 @@ select chk('and only now is the driver free', public.current_mode('c0000000-0000
 \echo '══════ G · the ex-passenger can drive again ══════'
 select test_as('c0000000-0000-4000-8000-000000000001');
 select chk('going on duty now works', mode, 'available') from public.set_user_mode('available');
+
+\echo ''
+select expect(19);

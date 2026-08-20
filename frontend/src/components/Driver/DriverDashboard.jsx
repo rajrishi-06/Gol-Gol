@@ -22,6 +22,7 @@ import RightPanel from "../RightPanel";
 import Button from "../ui/Button";
 import Card from "../ui/Card";
 import Badge from "../ui/Badge";
+import HeadingHome from "./HeadingHome";
 import Spinner from "../ui/Spinner";
 import Alert from "../ui/Alert";
 import EmptyState from "../ui/EmptyState";
@@ -322,6 +323,14 @@ export default function DriverDashboard() {
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden sm:flex-row">
         <div className="flex w-full flex-col overflow-y-auto bg-background px-5 pb-8 pt-5 sm:w-[460px] sm:shrink-0 sm:border-r sm:border-border sm:px-6 lg:w-[500px]">
           <DutyToggle online={isOnline} onToggle={toggleDuty} busy={dutyBusy} live={live} />
+
+          {/* Only worth offering while on duty and empty-handed — it changes
+              what dispatch may send, not what to do with a ride in progress. */}
+          {isOnline && (
+            <div className="mt-3">
+              <HeadingHome onChange={refresh} />
+            </div>
+          )}
 
           {gpsError && isOnline && (
             <Alert tone={permission === "denied" ? "danger" : "warning"} className="mt-3">

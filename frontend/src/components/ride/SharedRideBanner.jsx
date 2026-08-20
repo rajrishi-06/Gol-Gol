@@ -1,4 +1,7 @@
-import { Users, Sparkles, Clock } from "lucide-react";
+import { useState } from "react";
+import { Users, Sparkles, Clock, Ban, KeyRound } from "lucide-react";
+import { toast } from "sonner";
+import { blockCoPassenger, issueDropOtp } from "../../lib/pooling";
 import { formatDuration } from "../../lib/format";
 import Card from "../ui/Card";
 
@@ -11,9 +14,32 @@ import Card from "../ui/Card";
  * are shown as a first name and a rating only: the stop sequence would
  * otherwise tell a stranger where another rider lives.
  */
-export default function SharedRideBanner({ context }) {
+export default function SharedRideBanner({ context, rideId }) {
+  const [dropCode, setDropCode] = useState(null);
+  const [blocked, setBlocked] = useState(() => new Set());
+
   if (!context) return null;
   const mates = context.co_passengers ?? [];
+
+  const block = async (mate) => {
+    if (!mate.user_id) return;
+    const { error } = await blockCoPassenger(mate.user_id);
+    if (error) {
+      toast.error("Couldn't save that.");
+      return;
+    }
+    setBlocked((prev) => new Set(prev).add(mate.user_id));
+    toast.success(`You won't be matched with ${mate.name} again`);
+  };
+
+  const showDropCode = async () => {
+    const { data, error } = await issueDropOtp(rideId);
+    if (error || !data) {
+      toast.error("Couldn't get your code.");
+      return;
+    }
+    setDropCode(data);
+  };
   if (!context.pooled && !context.shareable) return null;
 
   if (!context.pooled) {
@@ -53,9 +79,49 @@ export default function SharedRideBanner({ context }) {
               <span className="font-medium text-foreground">{m.name}</span>
               <span className="text-subtle">★ {m.rating}</span>
               {m.aboard && <span className="text-primary">· aboard</span>}
+              {/* Opt-out that sticks: reporting someone should mean never
+                  sharing with them again, not just this once. */}
+              {m.user_id && !blocked.has(m.user_id) && (
+                <button
+                  type="button"
+                  onClick={() => block(m)}
+                  aria-label={`Never match me with ${m.name} again`}
+                  className="ml-0.5 rounded-full p-0.5 text-subtle transition-colors hover:bg-danger-subtle hover:text-danger-fg focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <Ban className="h-3 w-3" />
+                </button>
+              )}
+              {m.user_id && blocked.has(m.user_id) && (
+                <span className="text-danger">· blocked</span>
+              )}
             </li>
           ))}
         </ul>
+      )}
+
+      {/* Getting out of a shared vehicle needs a code, so a driver cannot close
+          the wrong booking when several are aboard. */}
+      {context.pooled && rideId && (
+        <div className="mt-3 border-t border-border pt-3">
+          {dropCode ? (
+            <p className="flex items-center gap-2 text-sm">
+              <KeyRound className="h-4 w-4 shrink-0 text-primary" />
+              <span className="text-muted">Show your driver</span>
+              <span className="font-mono text-lg font-semibold tracking-[0.3em] text-foreground">
+                {dropCode}
+              </span>
+            </p>
+          ) : (
+            <button
+              type="button"
+              onClick={showDropCode}
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <KeyRound className="h-3.5 w-3.5" />
+              Get my drop-off code
+            </button>
+          )}
+        </div>
       )}
 
       {context.stops_before_drop > 0 && (

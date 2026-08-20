@@ -16,6 +16,7 @@ import {
   holdPoolSeat,
   poolableRides,
   releaseSeatHold,
+  verifyDrop,
 } from "../../lib/pooling";
 import { distanceKm } from "../../lib/geo";
 import { notifyUser } from "../../lib/notify";
@@ -71,6 +72,8 @@ export default function DriverActiveRide() {
   const [dismissed, setDismissed] = useState(() => new Set());
   const [headcountOpen, setHeadcountOpen] = useState(false);
   const [pendingOtp, setPendingOtp] = useState("");
+  const [dropOtp, setDropOtp] = useState("");
+  const [dropError, setDropError] = useState("");
 
   const heldRef = useRef(null);
   const publisherRef = useRef(null);
@@ -369,6 +372,20 @@ export default function DriverActiveRide() {
 
   const handleComplete = async () => {
     if (!ride || ride.status !== "ongoing") return;
+
+    // With several riders aboard, "completed" is ambiguous — closing the wrong
+    // booking ends someone's trip, and their fare, at a place they never got
+    // out. A code from the rider removes the ambiguity. Solo rides skip it,
+    // because there is nothing to confuse.
+    if (ride.pooled && !ride.drop_verified) {
+      setDropError("");
+      const { data: ok, error: err } = await verifyDrop(rideId, dropOtp);
+      if (err || !ok) {
+        setDropError("That code doesn't match. Ask the rider to read it again.");
+        return;
+      }
+    }
+
     setBusy(true);
     const waitingMinutes = ride.arrived_at && ride.started_at
       ? Math.max(0, (new Date(ride.started_at) - new Date(ride.arrived_at)) / 60000)
@@ -584,6 +601,31 @@ export default function DriverActiveRide() {
             <Button variant="ghost" fullWidth className="mt-2" onClick={() => setCancelOpen(true)}>
               Cancel ride
             </Button>
+          </Card>
+        )}
+
+        {/* A pooled drop needs the rider's code before the booking can close. */}
+        {ride.status === "ongoing" && ride.pooled && !ride.drop_verified && (
+          <Card className="mt-4 p-4">
+            <h2 className="font-semibold text-foreground">Dropping this rider?</h2>
+            <p className="mt-1 text-sm text-muted">
+              Ask {rider?.name?.split(" ")[0] || "them"} for their 4-digit drop-off code.
+              It makes sure the right booking closes.
+            </p>
+            <Field label="Drop-off code" error={dropError} htmlFor="drop-otp" className="mt-3">
+              {({ id, ...aria }) => (
+                <Input
+                  id={id}
+                  {...aria}
+                  inputMode="numeric"
+                  maxLength={4}
+                  placeholder="4-digit code"
+                  value={dropOtp}
+                  onChange={(e) => setDropOtp(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                  className="text-center text-lg tracking-[0.4em]"
+                />
+              )}
+            </Field>
           </Card>
         )}
 
