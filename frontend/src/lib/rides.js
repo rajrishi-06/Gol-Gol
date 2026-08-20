@@ -176,6 +176,29 @@ export const rejectRideRequest = (requestId, reason = null) =>
 export const removeCarpoolRider = (publishedRideId, riderId) =>
   rpc("remove_carpool_rider", { p_published_ride_id: publishedRideId, p_rider_id: riderId });
 
+/** A rider giving up a seat they asked for or were given. */
+export const cancelCarpoolSeat = (requestId) =>
+  rpc("cancel_carpool_seat", { p_request_id: requestId });
+
+/**
+ * Setting off. Every confirmed seat becomes a ride waiting to board, each with
+ * its own code — the driver then starts them one at a time from the trip
+ * screen, exactly as they would a pooled hail.
+ */
+export const startCarpoolTrip = (publishedRideId) =>
+  rpc("start_carpool_trip", { p_published_ride_id: publishedRideId });
+
+/** The bookings sold on a published ride, for the driver carrying them. */
+export const carpoolTripRides = async (publishedRideId) => {
+  const { data, error } = await supabase
+    .from("rides")
+    .select("id, rider_id, status, seats, fare, from_address, to_address, started_at")
+    .eq("published_ride_id", publishedRideId)
+    .not("status", "in", "(cancelled,expired)")
+    .order("created_at");
+  return { data: data ?? [], error };
+};
+
 // ── admin ───────────────────────────────────────────────────────────────────
 
 export const adminPendingDrivers = () => rpc("admin_pending_drivers", {});

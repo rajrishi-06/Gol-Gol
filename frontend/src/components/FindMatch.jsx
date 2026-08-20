@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
-import { Search, Send, Users, Clock, Check, Map as MapIcon } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Search, Send, Users, Clock, Navigation, Map as MapIcon } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../lib/auth.jsx";
 import { useBooking } from "../lib/booking.jsx";
 import { hasValidCoords } from "../lib/geo";
+import { cancelCarpoolSeat } from "../lib/rides";
 import { formatCurrency, formatDistance, formatTime } from "../lib/format";
 import { cn } from "../lib/cn";
 import Button from "./ui/Button";
@@ -33,6 +35,7 @@ export default function FindMatch({ fromCords, toCords, dateOfDeparture }) {
   const [form, setForm] = useState({ seats: 1, maxPrice: "", maxDistance: "", notes: "" });
   const [rides, setRides] = useState([]);
   const [myRequests, setMyRequests] = useState({});
+  const [releasingId, setReleasingId] = useState(null);
   const [loading, setLoading] = useState(false);
   const [sendingId, setSendingId] = useState(null);
   const [error, setError] = useState(null);
@@ -45,10 +48,17 @@ export default function FindMatch({ fromCords, toCords, dateOfDeparture }) {
     if (!userId) return;
     const { data } = await supabase
       .from("ride_requests")
-      .select("published_ride_id, status")
+      .select("id, published_ride_id, status, ride_id")
       .eq("rider_id", userId)
       .in("status", ["pending", "accepted", "rejected"]);
-    setMyRequests(Object.fromEntries((data ?? []).map((r) => [r.published_ride_id, r.status])));
+    setMyRequests(
+      Object.fromEntries(
+        (data ?? []).map((r) => [
+          r.published_ride_id,
+          { id: r.id, status: r.status, rideId: r.ride_id },
+        ])
+      )
+    );
   }, [userId]);
 
   useEffect(() => {
@@ -64,7 +74,10 @@ export default function FindMatch({ fromCords, toCords, dateOfDeparture }) {
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "ride_requests", filter: `rider_id=eq.${userId}` },
         ({ new: row }) => {
-          setMyRequests((prev) => ({ ...prev, [row.published_ride_id]: row.status }));
+          setMyRequests((prev) => ({
+            ...prev,
+            [row.published_ride_id]: { id: row.id, status: row.status, rideId: row.ride_id },
+          }));
           if (row.status === "accepted") toast.success("Your seat request was accepted");
           if (row.status === "rejected") toast("Your seat request was declined");
         }
@@ -110,7 +123,11 @@ export default function FindMatch({ fromCords, toCords, dateOfDeparture }) {
     setMyRequests((prev) => {
       const next = { ...prev };
       results.forEach((r) => {
-        if (r.my_request_status) next[r.id] = r.my_request_status;
+        // The search knows the status but not the request row; keep whatever
+        // `loadMyRequests` already found so the seat stays releasable.
+        if (r.my_request_status) {
+          next[r.id] = { ...(next[r.id] ?? {}), status: r.my_request_status };
+        }
       });
       return next;
     });
@@ -141,26 +158,51 @@ export default function FindMatch({ fromCords, toCords, dateOfDeparture }) {
       toast.error("Couldn't send your request. Please try again.");
       return;
     }
-    setMyRequests((prev) => ({ ...prev, [ride.id]: "pending" }));
+    setMyRequests((prev) => ({ ...prev, [ride.id]: { status: "pending" } }));
     toast.success("Request sent — we'll tell you as soon as the driver decides.");
   };
 
-  /** Shape the map preview expects: the driver's leg plus each rider's stops. */
+  /**
+   * Letting a seat go.
+   *
+   * A rider could ask for a seat and then had no way to withdraw — the request
+   * sat pending forever, or they were accepted onto a ride they no longer
+   * wanted and the driver kept a seat off sale for them.
+   */
+  const releaseSeat = async (mine, ride) => {
+    setReleasingId(mine.id);
+    const { error: err } = await cancelCarpoolSeat(mine.id);
+    setReleasingId(null);
+    if (err) {
+      toast.error(err.message || "Couldn't release this seat.");
+      return;
+    }
+    setMyRequests((prev) => {
+      const next = { ...prev };
+      delete next[ride.id];
+      return next;
+    });
+    toast.success("Seat released.");
+    loadMyRequests();
+  };
+
+  /**
+   * Shape the map preview expects: the driver's leg, plus where *you* would
+   * join so the detour is obvious.
+   *
+   * This used to plot every accepted rider's pickup and drop with their name
+   * against it, from the `accepted_riders` the search returned. Those are
+   * strangers' home addresses. The search no longer returns them and the
+   * preview no longer wants them — how full the car is answers the question
+   * the pins were pretending to.
+   */
   const preview = (ride) => ({
     id: ride.id,
     driver: {
       driver_start: { lat: ride.from_lat, lng: ride.from_lng },
       driver_end: { lat: ride.to_lat, lng: ride.to_lng },
     },
-    riders: [
-      ...(ride.accepted_riders ?? []).map((r) => ({
-        pickup: r.pickup?.lat != null ? r.pickup : null,
-        drop: r.drop?.lat != null ? r.drop : null,
-        name: r.name || "Rider",
-      })),
-      // Show where *you* would join, so the detour is obvious.
-      { pickup: fromCords, drop: toCords, name: "You" },
-    ],
+    riders: [{ pickup: fromCords, drop: toCords, name: "You" }],
   });
 
   const statusBadge = (status) => {
@@ -248,7 +290,8 @@ export default function FindMatch({ fromCords, toCords, dateOfDeparture }) {
             </h3>
             <div className="space-y-2">
               {rides.map((ride) => {
-                const status = myRequests[ride.id];
+                const mine = myRequests[ride.id];
+                const status = mine?.status;
                 const driverName = ride.driver_name || "Driver";
                 return (
                   <Card key={ride.id} className="p-3.5">
@@ -267,6 +310,11 @@ export default function FindMatch({ fromCords, toCords, dateOfDeparture }) {
                         <p className="inline-flex items-center gap-1 text-xs text-subtle">
                           <Users className="h-3 w-3" />
                           {ride.available_seats} left
+                          {ride.riders_aboard > 0 && (
+                            <span className="text-subtle">
+                              · {ride.riders_aboard} sharing
+                            </span>
+                          )}
                         </p>
                       </div>
                     </div>
@@ -313,10 +361,20 @@ export default function FindMatch({ fromCords, toCords, dateOfDeparture }) {
                       >
                         <MapIcon className="h-3.5 w-3.5" /> View on map
                       </Button>
-                      {status === "accepted" && (
-                        <span className="inline-flex items-center gap-1 text-xs text-success-fg">
-                          <Check className="h-3.5 w-3.5" /> The driver has your details
-                        </span>
+                      {status === "accepted" && mine?.rideId && (
+                        <Button size="sm" as={Link} to={`/rider/ride/${mine.rideId}`}>
+                          <Navigation className="h-3.5 w-3.5" /> Track this ride
+                        </Button>
+                      )}
+                      {(status === "accepted" || status === "pending") && mine?.id && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          loading={releasingId === mine.id}
+                          onClick={() => releaseSeat(mine, ride)}
+                        >
+                          Give up seat
+                        </Button>
                       )}
                     </div>
                   </Card>

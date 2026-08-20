@@ -1,10 +1,17 @@
 import { useCallback, useEffect, useState } from "react";
-import { X, Check, Users, Inbox } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { X, Check, Users, Inbox, Navigation } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../lib/auth.jsx";
 import { useBooking } from "../lib/booking.jsx";
-import { acceptRideRequest, rejectRideRequest, removeCarpoolRider } from "../lib/rides";
+import {
+  acceptRideRequest,
+  rejectRideRequest,
+  removeCarpoolRider,
+  startCarpoolTrip,
+  carpoolTripRides,
+} from "../lib/rides";
 import { distanceKm, hasValidCoords } from "../lib/geo";
 import { formatCurrency, formatDate, formatDistance } from "../lib/format";
 import Button from "./ui/Button";
@@ -27,6 +34,7 @@ import Field, { Input, Textarea } from "./ui/Field";
 export default function PublishRide() {
   const { userId } = useAuth();
   const trip = useBooking();
+  const navigate = useNavigate();
 
   const [publishedRide, setPublishedRide] = useState(null);
   const [requests, setRequests] = useState([]);
@@ -34,6 +42,7 @@ export default function PublishRide() {
   const [busyId, setBusyId] = useState(null);
   const [error, setError] = useState(null);
   const [form, setForm] = useState({ availableSeats: 1, farePerSeat: "", notes: "" });
+  const [departing, setDeparting] = useState(false);
 
   const routeReady = hasValidCoords(trip.fromCords) && hasValidCoords(trip.toCords);
   const routeKm = routeReady ? distanceKm(trip.fromCords, trip.toCords) : 0;
@@ -166,6 +175,34 @@ export default function PublishRide() {
     fetchPublished();
   };
 
+  /**
+   * Set off.
+   *
+   * Until 0013 this screen had no such button, because there was nothing to
+   * start: accepting a request wrote a row of JSON and the journey happened
+   * off the platform. Each confirmed seat is now a booking on a trip, so
+   * departing hands the driver the same trip screen a pooled hail gives them —
+   * the stop sequence in travel order, and a boarding code per rider.
+   */
+  const setOff = async () => {
+    setDeparting(true);
+    const { error: err } = await startCarpoolTrip(publishedRide.id);
+    if (err) {
+      setDeparting(false);
+      toast.error(err.message || "Couldn't start this trip.");
+      return;
+    }
+    const { data: bookings } = await carpoolTripRides(publishedRide.id);
+    const first = bookings.find((b) => b.status === "arrived") ?? bookings[0];
+    setDeparting(false);
+    if (!first) {
+      toast.error("Nobody has a seat on this ride yet.");
+      return;
+    }
+    toast.success("Trip started — board each rider with their code.");
+    navigate(`/driver/ride/${first.id}`);
+  };
+
   const riders = publishedRide?.accepted_riders ?? [];
 
   return (
@@ -211,14 +248,26 @@ export default function PublishRide() {
               <dd className="text-foreground">{formatDate(publishedRide.departure_time)}</dd>
             </div>
           </dl>
-          <div className="mt-3 flex gap-2">
-            <Button size="sm" onClick={() => closeRide("completed")}>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {riders.length > 0 && (
+              <Button size="sm" onClick={setOff} loading={departing}>
+                <Navigation className="h-4 w-4" />
+                Set off
+              </Button>
+            )}
+            <Button size="sm" variant="secondary" onClick={() => closeRide("completed")}>
               Mark completed
             </Button>
             <Button size="sm" variant="danger" onClick={() => closeRide("cancelled")}>
               Cancel ride
             </Button>
           </div>
+          {riders.length > 0 && (
+            <p className="mt-2 text-xs text-subtle">
+              Setting off gives you the stop sequence in travel order and a boarding
+              code for each of the {riders.length} rider{riders.length === 1 ? "" : "s"}.
+            </p>
+          )}
         </Card>
       ) : (
         <form onSubmit={publish} className="rounded-2xl border border-border bg-surface p-4 shadow-soft">

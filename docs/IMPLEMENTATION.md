@@ -7,7 +7,7 @@ Pairs with `docs/FEATURE_ANALYSIS.md` (the audit that motivated it).
 
 ## 1. Setup — read this before testing
 
-Eight SQL migrations must be applied on top of the existing schema:
+Nine SQL migrations must be applied on top of the existing schema:
 
 ```
 supabase/migrations/0005_production_platform.sql
@@ -18,10 +18,11 @@ supabase/migrations/0009_roles_and_chaining.sql
 supabase/migrations/0010_scoring_batch_and_gaps.sql
 supabase/migrations/0011_women_only_and_private_channels.sql
 supabase/migrations/0012_break_rls_recursion.sql
+supabase/migrations/0013_carpool_trips.sql
 ```
 
 Either `supabase db push`, or paste each file into the Supabase SQL editor and
-run it (in order). All eight are idempotent — re-running them is safe. None of them
+run it (in order). All nine are idempotent — re-running them is safe. None of them
 need extensions: the pooling geometry is plain trigonometry, so there is
 nothing to enable on the project.
 
@@ -32,7 +33,7 @@ sudo ./supabase/tests/run.sh
 ```
 
 That builds a throwaway local Postgres, applies every migration in order, and
-runs 145 assertions over the pooling flow and its RLS policies. It is what caught the fact that
+runs 187 assertions over the pooling flow, its RLS policies and the carpool path. It is what caught the fact that
 `0005` used to change `nearby_pending_rides`'s return type without dropping it
 first, which made a clean `0003 → 0005` chain fail outright.
 
@@ -176,11 +177,14 @@ RPC that checks the caller's role on the ride and writes a `ride_events` row:
 | `complete_ride` | assigned driver, status `ongoing`; settles fare + writes `payments` |
 | `cancel_ride` | rider or driver; computes the fee; frees the driver |
 | `submit_rating` | participant, ride completed; a trigger recomputes the average |
-| `accept_ride_request` / `reject_ride_request` / `remove_carpool_rider` | owning driver, row-locked seat accounting |
+| `accept_ride_request` | owning driver, row-locked seats, corridor-checked; creates the booking, its stops and its boarding code |
+| `reject_ride_request` | owning driver, **pending requests only** — a confirmed seat is withdrawn with `remove_carpool_rider`, which also unwinds the booking |
+| `remove_carpool_rider` / `cancel_carpool_seat` | the driver's side and the rider's; both cancel the booking, clear its stops and put the seat back on sale |
+| `start_carpool_trip` | owning driver, at least one confirmed seat; makes the trip active and every seat ready to board |
 | `set_driver_verification` | admin only |
 
 Read-side RPCs: `nearby_pending_rides`, `nearby_driver_summary`, `my_rides`,
-`search_published_rides`, `driver_earnings_summary`, `driver_earnings_daily`,
+`search_published_rides` (sanitised), `driver_earnings_summary`, `driver_earnings_daily`,
 `get_shared_trip`, `mobile_exists`, `admin_pending_drivers`.
 
 ---
@@ -193,6 +197,8 @@ Read-side RPCs: `nearby_pending_rides`, `nearby_driver_summary`, `my_rides`,
 | `users_select_all using (true)` | scoped to self, admins and actual counterparties |
 | `drivers_select_auth using (true)` — every licence number and document URL readable by any signed-in user | scoped; carpool search moved to `search_published_rides()` returning safe columns |
 | `active_select_auth using (true)` — every driver's live GPS | scoped to the driver and their current rider |
+| `pub_select_auth using (true)` + `search_published_rides` returning `accepted_riders` — every carpool passenger's name, mobile and exact pickup/drop coordinates, to anyone with an account | direct reads are need-to-know; search returns `riders_aboard` / `seats_taken` only |
+| the `rides` policy read `drivers` while the `drivers` policy read `rides` — Postgres refused the cycle, so **every** authenticated read of `rides` raised | cross-table tests moved into `security definer` helpers (`0012`) |
 | `rides_update … with check (true)` — **any** user could edit **any** pending ride | own rides only; claiming goes through `accept_ride()` |
 | `rides_select … or status = 'pending'` | own rides, plus a narrow dispatch window |
 | a driver could `update` their own `verification_status = 'approved'` | blocked by `drivers_guard_verification()`; only `rejected → pending` (resubmission) is self-serve |
@@ -225,7 +231,5 @@ Read-side RPCs: `nearby_pending_rides`, `nearby_driver_summary`, `my_rides`,
   a gateway id goes. Cash and UPI settle in person today.
 - **KYC upload** still takes a document URL; Supabase Storage buckets need
   project-level configuration.
-- **Carpool trips** are matched, notified and seat-accurate, but a matched
-  carpool doesn't yet become a live tracked multi-stop trip.
-- **No test suite** — no runner is configured in this repo.
+- **SMS / e-mail receipts** need a provider; the receipt itself is built.
 - Hindi/Telugu language options are stored but the strings aren't translated yet.

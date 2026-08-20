@@ -1,7 +1,7 @@
 # Pooling, unified roles and adaptive capacity — architecture spec
 
 **Status:** the whole build order — P0 through P5 — is **implemented** across
-migrations `0007`–`0012` and the frontend. Batch matching ships **switched off**;
+migrations `0007`–`0013` and the frontend. Batch matching ships **switched off**;
 see §11 for why turning it on is a volume decision rather than a deploy.
 **Companion:** a narrative version of this plan, with diagrams, is published as
 an artifact for review.
@@ -798,7 +798,8 @@ supabase/migrations/0009_roles_and_chaining.sql  mode + sequential chaining
 supabase/migrations/0010_scoring_batch_and_gaps.sql  scoring, batching, the rest
 supabase/migrations/0011_women_only_and_private_channels.sql  women-only + channel RLS
 supabase/migrations/0012_break_rls_recursion.sql     the rides↔drivers policy cycle
-supabase/tests/run.sh                  applies every migration, runs 145 assertions
+supabase/migrations/0013_carpool_trips.sql           published carpools become trips
+supabase/tests/run.sh                  applies every migration, runs 187 assertions
 frontend/src/lib/pooling.js            RPC wrappers + local previews of the arithmetic
 frontend/src/components/ride/SeatPicker.jsx        seats + the sharing consent gate
 frontend/src/components/ride/SharedRideBanner.jsx  what the rider is told
@@ -1067,6 +1068,76 @@ against an empty table — `payments` only gets a row on completion, and the
 fixture's ride was still `ongoing`. It now completes a second ride under a second
 driver purely so there is a payment for the policy to hide.
 
+### Carpool trip execution — shipped in `0013`
+
+The published-carpool path had been half a feature since `0001`. A driver
+published a route, riders requested seats, the driver accepted — and the
+software stopped. Acceptance appended a JSON object to
+`published_rides.accepted_riders` and sent a notification. There was no `rides`
+row, so there was no trip, no stop sequence, no live tracking, no boarding OTP,
+no fare on the rider's account, no receipt, no rating, and no entry in either
+party's history. Two strangers were introduced and left to arrange the journey
+themselves.
+
+It was deferred for wanting a multi-stop trip engine. `0007`–`0012` built one,
+so `0013` points the carpool path at it rather than growing a second:
+
+| Step | What now happens |
+|---|---|
+| First seat sold | `carpool_trip()` opens a trip with the published origin, destination and seat count |
+| Accept | corridor-checked, then a real booking on that trip with stops placed by `trip_place_stops` |
+| Set off | `start_carpool_trip()` makes the trip active and every seat `arrived` |
+| Board | `start_ride()` per rider, against their own code — a carpool has several |
+| Complete | `complete_ride()` as usual, charging the price that was published |
+
+Four things had to change in the engine to accept it.
+
+**A trip can be `scheduled`.** `idx_trips_one_active_per_driver` allows a driver
+exactly one `active` trip — rightly, since two would mean two vehicles. But a
+carpool trip exists from the first seat sold, possibly days before departure, so
+being born active would lock the driver out of every other job in the meantime.
+Carpool trips wait as `scheduled` and become active when the driver sets off.
+
+**A trip knows where it began.** `trip_remaining_path` seeded the route with the
+driver's live position, which a driver who has not opened the app yet does not
+have — leaving a one-point path and failing every corridor test for want of a
+route. `trips.origin_lat/lng` is the fallback.
+
+**A sold seat's price is not the meter's.** Three separate places recomputed the
+fare from distance and headcount: the insert trigger, `reprice_ride` at
+boarding, and `complete_ride` at the end. The last one silently replaced a
+published ₹90 with ₹205 at the moment the rider got out, which is the worst
+possible time to learn the price changed. `rides.fare_locked` opts a booking out
+of all three.
+
+**A headcount cannot exceed the seats bought.** `start_ride` let the driver's
+count stand up to vehicle capacity, which is the whole feature for a hail. On a
+sold seat it both undercharged and overran the vehicle: boarding three people
+onto a two-seat booking in a car already carrying one raised `trips_seats_sane`
+and left the driver looking at a database error with a passenger at the door.
+Locked fares clamp to the seats paid for.
+
+**And a leak, found on the way in.** `search_published_rides` returned
+`accepted_riders` verbatim, which carries each accepted rider's name, mobile
+number, and the exact coordinates of their pickup and drop; the Find-a-match
+screen plotted those as labelled pins. Anyone with an account could sweep a
+corridor and collect home addresses and phone numbers of people who had done
+nothing but book a seat. `published_rides` itself was `using (true)` on top of
+that. Search now returns `riders_aboard` and `seats_taken` — how full the car
+is, which is what the preview was really asking — and direct reads are
+need-to-know.
+
+`08_carpool_trips.sql` covers all of it in 42 assertions: the journey created,
+the stop order for two riders travelling different distances along the route
+(`Riya pickup → Sam pickup → Riya drop → Sam drop`), a rider 55 km off the route
+refused, a backwards journey refused, the price surviving boarding and
+completion, the headcount clamp, both sides releasing a seat, and the privacy
+of the rider list.
+
 ### Still open
 
-Nothing from the design.
+Nothing from the design, and nothing from the original feature audit either —
+`docs/FEATURE_ANALYSIS.md` §5's last two deferrals (an automated suite, and
+carpool trip execution) are both closed. What remains needs something this
+repository cannot supply: a payment gateway's credentials, a Storage bucket on
+the real project for KYC documents, and an SMS/e-mail provider for receipts.

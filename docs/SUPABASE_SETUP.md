@@ -9,7 +9,7 @@ Follow top to bottom for a fresh project. Your current project ref is
 `pg-delta` "failed to cache migrations catalog" warning is **non-fatal** — every
 `Applying migration ...` line succeeded.
 
-### ⚠️ Eight newer migrations must be applied
+### ⚠️ Nine newer migrations must be applied
 
 ```
 supabase/migrations/0005_production_platform.sql
@@ -20,10 +20,11 @@ supabase/migrations/0009_roles_and_chaining.sql
 supabase/migrations/0010_scoring_batch_and_gaps.sql
 supabase/migrations/0011_women_only_and_private_channels.sql
 supabase/migrations/0012_break_rls_recursion.sql
+supabase/migrations/0013_carpool_trips.sql
 ```
 
 Run `supabase db push` again, or paste each file into the SQL editor **in
-order**. All eight are idempotent, so re-running them is safe. No extensions are
+order**. All nine are idempotent, so re-running them is safe. No extensions are
 required — the pooling geometry is plain SQL rather than PostGIS.
 Between them they:
 

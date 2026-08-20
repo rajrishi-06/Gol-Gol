@@ -252,8 +252,12 @@ map of files, routes, tables and RPCs.
 - **KYC document upload to Supabase Storage** — the driver form still takes a
   document URL; Storage buckets need project-level configuration.
 - **SMS/e-mail delivery** for receipts (needs a provider).
-- **Automated test suite** — no test runner is configured in this repo; adding one
-  is a tooling change, and the request explicitly excluded pipeline work.
-- **Carpool trip execution** (turning an accepted carpool match into a live tracked
-  multi-stop trip) — a large feature in its own right; matching, notification and
-  seat integrity are fixed here.
+- ~~**Automated test suite**~~ — **built**. `supabase/tests/run.sh` applies every
+  migration to a throwaway Postgres and runs 187 assertions across eight files,
+  including RLS exercised as a real role rather than as the table owner. Screens
+  are swept headless at two viewports.
+- ~~**Carpool trip execution**~~ — **shipped in `0013`**. An accepted seat request
+  is now a booking on a real trip: stop sequence in travel order, a boarding code
+  per rider, live tracking, the published seat price honoured end to end, and a
+  receipt. It was deferred for wanting a multi-stop trip engine; `0007`–`0012`
+  built one, so this points the carpool path at it rather than growing a second.
