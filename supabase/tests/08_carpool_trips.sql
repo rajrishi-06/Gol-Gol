@@ -19,8 +19,8 @@ insert into auth.users (id, phone, raw_user_meta_data) values
   ('c0000000-0000-4000-8000-00000000000a','+919700000009','{"name":"Ops"}');
 update public.users set is_admin = true where id='c0000000-0000-4000-8000-00000000000a';
 
-insert into public.drivers (user_id, vehicle_type, vehicle_class)
-values ('c0000000-0000-4000-8000-000000000001','car','sedan');
+insert into public.drivers (user_id, vehicle_type, vehicle_class, document_path)
+values ('c0000000-0000-4000-8000-000000000001','car','sedan','c0000000-0000-4000-8000-000000000001/licence.jpg');
 insert into public.active_drivers (user_id, is_online, heartbeat_at)
 values ('c0000000-0000-4000-8000-000000000001', true, now());
 select test_as('c0000000-0000-4000-8000-00000000000a');

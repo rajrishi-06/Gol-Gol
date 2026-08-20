@@ -13,8 +13,8 @@ insert into auth.users (id, phone, raw_user_meta_data) values
   ('99999999-9999-9999-9999-999999999999','+919000000009','{"name":"Ops Admin"}');
 update public.users set is_admin = true where id='99999999-9999-9999-9999-999999999999';
 
-insert into public.drivers (user_id, vehicle_type, vehicle_class)
-values ('11111111-1111-1111-1111-111111111111','auto','auto');
+insert into public.drivers (user_id, vehicle_type, vehicle_class, document_path)
+values ('11111111-1111-1111-1111-111111111111','auto','auto','11111111-1111-1111-1111-111111111111/licence.jpg');
 insert into public.active_drivers (user_id, is_online, current_lat, current_lng, heartbeat_at)
 values ('11111111-1111-1111-1111-111111111111', true, 12.97, 77.50, now());
 select test_as('99999999-9999-9999-9999-999999999999');

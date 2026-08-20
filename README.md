@@ -79,7 +79,9 @@ verification console.
 ### 🚦 Drivers
 
 - **Onboarding** with a real verification workflow — licence, registration,
-  vehicle details and the **service class** you'll serve.
+  vehicle details and the **service class** you'll serve. Your licence uploads
+  to private storage that only you and the verification team can open; nobody is
+  asked to publish their ID to a shareable link.
 - **Dispatch that works** — requests matched on service class, within 5 km, with
   the rider's name, rating, both addresses and the pickup distance on the card.
 - **Race-safe accepting** — an atomic claim; the loser is told immediately.
@@ -93,6 +95,13 @@ verification console.
 Publish a route with seats, fare and departure time; riders search overlapping
 routes sorted by detour and request a seat. Accept/decline/remove are row-locked
 so a car can't be overbooked, and every decision notifies the rider.
+
+Accepting a seat creates a **real, tracked trip** — the rider's pickup and drop
+join the stop sequence in travel order, they get a boarding code and live
+tracking, and they are charged the per-seat price that was advertised rather
+than whatever a meter computes at drop-off. A request whose pickup or drop is
+off the published route is refused up front instead of discovered at departure,
+and either side can release a seat, which puts it back on sale.
 
 ---
 
@@ -115,7 +124,10 @@ append-only `ride_events` row.
 enumerate phone numbers, signed-in users can't read other drivers' licence
 numbers or live GPS, and nobody can edit a ride that isn't theirs. Dispatch
 visibility is narrowed to on-duty drivers of the right class within 8 km, so
-realtime doesn't broadcast every pickup in the city.
+realtime doesn't broadcast every pickup in the city. Policies are exercised as a
+real signed-in role rather than as the table owner — which is how a `rides` ⇄
+`drivers` policy cycle was found that made every authenticated read of `rides`
+fail outright.
 
 **Offline.** The service worker keeps the app shell and hashed assets available
 without a network (never API or map traffic), and prompts to refresh when a new

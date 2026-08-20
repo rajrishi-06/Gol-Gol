@@ -10,8 +10,8 @@ insert into auth.users (id, phone, raw_user_meta_data) values
   ('60000000-0000-4000-8000-000000000005','+919500000005','{"name":"Unstated"}'),
   ('60000000-0000-4000-8000-00000000000a','+919500000099','{"name":"Admin"}');
 update public.users set is_admin=true where id='60000000-0000-4000-8000-00000000000a';
-insert into public.drivers (user_id, vehicle_type, vehicle_class)
-values ('60000000-0000-4000-8000-000000000001','auto','auto');
+insert into public.drivers (user_id, vehicle_type, vehicle_class, document_path)
+values ('60000000-0000-4000-8000-000000000001','auto','auto','60000000-0000-4000-8000-000000000001/licence.jpg');
 insert into public.active_drivers (user_id, is_online, current_lat, current_lng, heartbeat_at)
 values ('60000000-0000-4000-8000-000000000001', true, 12.97, 77.50, now());
 select test_as('60000000-0000-4000-8000-00000000000a');
@@ -89,8 +89,8 @@ select chk('the woman can be added', status, 'accepted')
 -- matched onto his trip just because he has no preference of his own.
 insert into auth.users (id, phone, raw_user_meta_data)
 values ('60000000-0000-4000-8000-000000000006','+919500000006','{"name":"Driver Two"}');
-insert into public.drivers (user_id, vehicle_type, vehicle_class)
-values ('60000000-0000-4000-8000-000000000006','auto','auto');
+insert into public.drivers (user_id, vehicle_type, vehicle_class, document_path)
+values ('60000000-0000-4000-8000-000000000006','auto','auto','60000000-0000-4000-8000-000000000006/licence.jpg');
 insert into public.active_drivers (user_id, is_online, current_lat, current_lng, heartbeat_at)
 values ('60000000-0000-4000-8000-000000000006', true, 12.97, 77.50, now());
 select test_as('60000000-0000-4000-8000-00000000000a');

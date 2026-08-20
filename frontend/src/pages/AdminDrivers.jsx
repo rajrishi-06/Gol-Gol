@@ -3,6 +3,7 @@ import { ExternalLink, Check, X, RefreshCw, UserCheck, Search } from "lucide-rea
 import { toast } from "sonner";
 import { adminPendingDrivers, setDriverVerification } from "../lib/rides";
 import { formatDate } from "../lib/format";
+import { signedDocumentUrl } from "../lib/storage";
 import { cn } from "../lib/cn";
 import Page from "../components/layout/Page";
 import PoolingMetrics from "../components/PoolingMetrics";
@@ -67,6 +68,16 @@ export default function AdminDrivers() {
         .some((v) => v.toLowerCase().includes(term));
     });
   }, [drivers, filter, query]);
+
+  /**
+   * Documents are private, so verification opens a link that expires. Nothing
+   * durable is handed out and nothing has to be revoked afterwards.
+   */
+  const openDocument = async (path) => {
+    const { url, error: signErr } = await signedDocumentUrl(path);
+    if (signErr || !url) return toast.error("Couldn't open that document.");
+    window.open(url, "_blank", "noopener,noreferrer");
+  };
 
   const decide = async (driver, status, why = null) => {
     setBusyId(driver.user_id);
@@ -178,15 +189,28 @@ export default function AdminDrivers() {
                 <Row label="Service class" value={d.vehicle_class} />
               </dl>
 
-              {d.document_url && (
+              {/* A stored document is opened through a link that expires in a few
+                  minutes; only applications predating private storage still carry
+                  a permanent URL of their own. */}
+              {d.document_path ? (
+                <button
+                  type="button"
+                  onClick={() => openDocument(d.document_path)}
+                  className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" /> View licence
+                </button>
+              ) : d.document_url ? (
                 <a
                   href={d.document_url}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
                 >
-                  <ExternalLink className="h-3.5 w-3.5" /> View documents
+                  <ExternalLink className="h-3.5 w-3.5" /> View documents (external link)
                 </a>
+              ) : (
+                <p className="mt-3 text-sm text-warning-fg">No document on this application.</p>
               )}
 
               {d.verification_status !== "approved" && (

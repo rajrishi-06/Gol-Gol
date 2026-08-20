@@ -13,9 +13,9 @@ insert into auth.users (id, phone, raw_user_meta_data) values
   ('a0000000-0000-4000-8000-00000000000a','+919200000099','{"name":"Admin"}');
 update public.users set is_admin = true where id='a0000000-0000-4000-8000-00000000000a';
 
-insert into public.drivers (user_id, vehicle_type, vehicle_class) values
-  ('d0000000-0000-4000-8000-000000000001','auto','auto'),
-  ('d0000000-0000-4000-8000-000000000002','auto','auto');
+insert into public.drivers (user_id, vehicle_type, vehicle_class, document_path) values
+  ('d0000000-0000-4000-8000-000000000001','auto','auto','d0000000-0000-4000-8000-000000000001/licence.jpg'),
+  ('d0000000-0000-4000-8000-000000000002','auto','auto','d0000000-0000-4000-8000-000000000002/licence.jpg');
 insert into public.active_drivers (user_id, is_online, current_lat, current_lng, heartbeat_at) values
   ('d0000000-0000-4000-8000-000000000001', true, 12.97, 77.50, now()),
   ('d0000000-0000-4000-8000-000000000002', true, 12.97, 77.50, now());

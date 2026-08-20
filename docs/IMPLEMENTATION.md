@@ -7,7 +7,7 @@ Pairs with `docs/FEATURE_ANALYSIS.md` (the audit that motivated it).
 
 ## 1. Setup — read this before testing
 
-Nine SQL migrations must be applied on top of the existing schema:
+Ten SQL migrations must be applied on top of the existing schema:
 
 ```
 supabase/migrations/0005_production_platform.sql
@@ -19,10 +19,11 @@ supabase/migrations/0010_scoring_batch_and_gaps.sql
 supabase/migrations/0011_women_only_and_private_channels.sql
 supabase/migrations/0012_break_rls_recursion.sql
 supabase/migrations/0013_carpool_trips.sql
+supabase/migrations/0014_kyc_documents.sql
 ```
 
 Either `supabase db push`, or paste each file into the Supabase SQL editor and
-run it (in order). All nine are idempotent — re-running them is safe. None of them
+run it (in order). All ten are idempotent — re-running them is safe. None of them
 need extensions: the pooling geometry is plain trigonometry, so there is
 nothing to enable on the project.
 
@@ -33,7 +34,7 @@ sudo ./supabase/tests/run.sh
 ```
 
 That builds a throwaway local Postgres, applies every migration in order, and
-runs 187 assertions over the pooling flow, its RLS policies and the carpool path. It is what caught the fact that
+runs 189 assertions over the pooling flow, its RLS policies and the carpool path. It is what caught the fact that
 `0005` used to change `nearby_pending_rides`'s return type without dropping it
 first, which made a clean `0003 → 0005` chain fail outright.
 
@@ -229,7 +230,7 @@ Read-side RPCs: `nearby_pending_rides`, `nearby_driver_summary`, `my_rides`,
 
 - **Payment capture** is modelled but not charged — `payments.reference` is where
   a gateway id goes. Cash and UPI settle in person today.
-- **KYC upload** still takes a document URL; Supabase Storage buckets need
-  project-level configuration.
+- **Hindi / Telugu** are offered in Settings and stored, but the interface
+  strings are not translated yet.
 - **SMS / e-mail receipts** need a provider; the receipt itself is built.
 - Hindi/Telugu language options are stored but the strings aren't translated yet.

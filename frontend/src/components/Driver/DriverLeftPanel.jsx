@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { CheckCircle2, ShieldCheck, ExternalLink, Clock } from "lucide-react";
+import { CheckCircle2, ShieldCheck, ExternalLink, Clock, Upload, FileCheck2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../lib/auth.jsx";
@@ -10,6 +10,11 @@ import {
   RIDE_TYPE_MAP,
 } from "../../lib/vehicles";
 import { formatDate } from "../../lib/format";
+import {
+  uploadDriverDocument,
+  signedDocumentUrl,
+  ACCEPTED_DOC_TYPES,
+} from "../../lib/storage";
 import Logo from "../ui/Logo";
 import Button from "../ui/Button";
 import Field, { Input, Select } from "../ui/Field";
@@ -36,7 +41,7 @@ const EMPTY_FORM = {
   vehicleMake: "",
   vehicleModel: "",
   vehicleColor: "",
-  documentUrl: "",
+  documentPath: "",
 };
 
 /**
@@ -56,6 +61,8 @@ export default function DriverLeftPanel() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [error, setError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [docName, setDocName] = useState("");
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
@@ -71,7 +78,7 @@ export default function DriverLeftPanel() {
       vehicleMake: driver.vehicle_make || "",
       vehicleModel: driver.vehicle_model || "",
       vehicleColor: driver.vehicle_color || "",
-      documentUrl: driver.document_url || "",
+      documentPath: driver.document_path || "",
     });
   }, [driver]);
 
@@ -89,6 +96,30 @@ export default function DriverLeftPanel() {
     }
   }, [form.vehicleClass, classOptions]);
 
+  /** Upload straight away, so the applicant sees it land before submitting. */
+  const onPickDocument = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setError(null);
+    setUploading(true);
+    const { path, error: upErr } = await uploadDriverDocument(userId, file);
+    setUploading(false);
+    if (upErr) {
+      setError(upErr.message || "Couldn't upload that file. Please try again.");
+      return;
+    }
+    setDocName(file.name);
+    setForm((f) => ({ ...f, documentPath: path }));
+    toast.success("Licence uploaded.");
+  };
+
+  const viewDocument = async () => {
+    const { url, error: signErr } = await signedDocumentUrl(form.documentPath);
+    if (signErr || !url) return toast.error("Couldn't open that document.");
+    window.open(url, "_blank", "noopener,noreferrer");
+  };
+
   const submit = async (e) => {
     e.preventDefault();
     setError(null);
@@ -99,17 +130,12 @@ export default function DriverLeftPanel() {
       !form.vehicleRegistration ||
       !form.vehicleType ||
       !form.vehicleClass ||
-      !form.documentUrl
+      !(form.documentPath || driver?.document_url)
     ) {
-      return setError("Please fill in every required field, including the document link.");
+      return setError("Please fill in every required field, including your licence.");
     }
     if (new Date(form.licenseExpiry) < new Date()) {
       return setError("That licence has already expired. Renew it before applying.");
-    }
-    try {
-      new URL(form.documentUrl);
-    } catch {
-      return setError("Please enter a valid, viewable document URL.");
     }
 
     setSubmitting(true);
@@ -124,7 +150,7 @@ export default function DriverLeftPanel() {
         vehicle_make: form.vehicleMake.trim() || null,
         vehicle_model: form.vehicleModel.trim() || null,
         vehicle_color: form.vehicleColor.trim() || null,
-        document_url: form.documentUrl.trim(),
+        document_path: form.documentPath || null,
         // A DB trigger owns this field — a driver can't approve themselves.
         verification_status: "pending",
       };
@@ -345,30 +371,67 @@ export default function DriverLeftPanel() {
           </div>
 
           <Field
-            label="Document link"
+            label="Driving licence"
             required
-            hint="Google Drive, Dropbox, etc. — make sure it's viewable by anyone with the link."
+            hint="A photo or PDF, up to 10 MB. Only you and our verification team can open it."
             htmlFor="doc"
           >
             {(a) => (
-              <Input
-                {...a}
-                type="url"
-                value={form.documentUrl}
-                onChange={set("documentUrl")}
-                placeholder="https://drive.google.com/…"
-              />
+              <div className="space-y-2">
+                <label
+                  className="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed
+                             border-border-strong bg-surface-2 px-3.5 py-3 transition hover:border-primary/60"
+                >
+                  <input
+                    {...a}
+                    type="file"
+                    className="sr-only"
+                    accept={ACCEPTED_DOC_TYPES.join(",")}
+                    onChange={onPickDocument}
+                    disabled={uploading}
+                  />
+                  {form.documentPath ? (
+                    <FileCheck2 className="h-5 w-5 shrink-0 text-success-fg" />
+                  ) : (
+                    <Upload className="h-5 w-5 shrink-0 text-subtle" />
+                  )}
+                  <span className="min-w-0 flex-1 text-sm">
+                    <span className="block truncate font-medium text-foreground">
+                      {uploading
+                        ? "Uploading…"
+                        : form.documentPath
+                          ? docName || "Licence uploaded"
+                          : "Choose a photo or PDF"}
+                    </span>
+                    <span className="block text-xs text-subtle">
+                      {form.documentPath ? "Tap to replace" : "JPG, PNG, WEBP, HEIC or PDF"}
+                    </span>
+                  </span>
+                </label>
+
+                {form.documentPath && (
+                  <button
+                    type="button"
+                    onClick={viewDocument}
+                    className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" /> View what you uploaded
+                  </button>
+                )}
+              </div>
             )}
           </Field>
 
-          {driver?.document_url && (
+          {/* Applications made before documents moved into private storage still
+              have a link, and it is still what an admin will be looking at. */}
+          {!form.documentPath && driver?.document_url && (
             <a
               href={driver.document_url}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
             >
-              <ExternalLink className="h-3.5 w-3.5" /> View current document
+              <ExternalLink className="h-3.5 w-3.5" /> View the link on your application
             </a>
           )}
 

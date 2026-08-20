@@ -1,7 +1,7 @@
 # Pooling, unified roles and adaptive capacity — architecture spec
 
 **Status:** the whole build order — P0 through P5 — is **implemented** across
-migrations `0007`–`0013` and the frontend. Batch matching ships **switched off**;
+migrations `0007`–`0014` and the frontend. Batch matching ships **switched off**;
 see §11 for why turning it on is a volume decision rather than a deploy.
 **Companion:** a narrative version of this plan, with diagrams, is published as
 an artifact for review.
@@ -799,7 +799,8 @@ supabase/migrations/0010_scoring_batch_and_gaps.sql  scoring, batching, the rest
 supabase/migrations/0011_women_only_and_private_channels.sql  women-only + channel RLS
 supabase/migrations/0012_break_rls_recursion.sql     the rides↔drivers policy cycle
 supabase/migrations/0013_carpool_trips.sql           published carpools become trips
-supabase/tests/run.sh                  applies every migration, runs 187 assertions
+supabase/migrations/0014_kyc_documents.sql           driver documents into private storage
+supabase/tests/run.sh                  applies every migration, runs 189 assertions
 frontend/src/lib/pooling.js            RPC wrappers + local previews of the arithmetic
 frontend/src/components/ride/SeatPicker.jsx        seats + the sharing consent gate
 frontend/src/components/ride/SharedRideBanner.jsx  what the rider is told
@@ -1134,10 +1135,45 @@ refused, a backwards journey refused, the price surviving boarding and
 completion, the headcount clamp, both sides releasing a seat, and the privacy
 of the rider list.
 
+### Driver documents — shipped in `0014`
+
+Applying to drive asked for a "Document link", with this hint under the field:
+
+> Google Drive, Dropbox, etc. — make sure it's viewable by anyone with the link.
+
+That is the application instructing a driver to publish their own licence —
+full name, address, date of birth, licence number, photograph — to anyone who
+has or guesses the URL, and to leave it published for as long as they drive. It
+also meant the platform never held the document at all: an admin approved
+against a link the applicant could swap or revoke the moment approval landed.
+
+Documents now go to a private `driver-docs` bucket. The path is
+`<user_id>/licence-<ts>.<ext>`, and every storage policy keys on that first
+segment, so an applicant can write only into their own folder. Reading is the
+owner and `is_admin()`. Nothing is public, and verification opens a signed URL
+good for five minutes rather than storing a permanent one.
+
+Two smaller things went with it. `admin_pending_drivers` returns the path so the
+console can sign it, falling back to the old `document_url` for applications
+made before this — those are not rewritten, since a link that predates the
+bucket is still what the admin needs to look at. And a check constraint now says
+an **approved** driver must have a document of one kind or the other: the form
+required one, but the database never did, so anything posting straight to
+PostgREST could be approved carrying nothing at all.
+
+Supabase's `storage` schema does not exist on a stock Postgres, so the bucket
+and its policies are guarded on `to_regclass('storage.buckets')` — the migration
+is a no-op locally, which is how the suite proves the chain still applies. The
+constraint and the RPC are not guarded and are covered by `07_rls.sql`; the
+policies themselves need a real project, like `0011`'s realtime rules.
+
 ### Still open
 
 Nothing from the design, and nothing from the original feature audit either —
 `docs/FEATURE_ANALYSIS.md` §5's last two deferrals (an automated suite, and
 carpool trip execution) are both closed. What remains needs something this
-repository cannot supply: a payment gateway's credentials, a Storage bucket on
-the real project for KYC documents, and an SMS/e-mail provider for receipts.
+repository cannot supply: a payment gateway's credentials, and an SMS/e-mail provider for
+receipts. Hindi and Telugu are offered in Settings and stored per account, but
+the interface strings themselves are still English — that one is a translation
+job, not an engineering one, and machine-translating safety wording ("SOS",
+"share this trip") unreviewed would be worse than leaving it visibly undone.

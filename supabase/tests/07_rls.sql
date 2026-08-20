@@ -21,9 +21,9 @@ insert into auth.users (id, phone, raw_user_meta_data) values
   ('70000000-0000-4000-8000-00000000000a','+919600000099','{"name":"Admin"}');
 update public.users set is_admin=true where id='70000000-0000-4000-8000-00000000000a';
 
-insert into public.drivers (user_id, vehicle_type, vehicle_class, license_number)
-values ('70000000-0000-4000-8000-000000000001','auto','auto','TS-SECRET-0001'),
-       ('70000000-0000-4000-8000-000000000004','auto','auto','TS-SECRET-0004');
+insert into public.drivers (user_id, vehicle_type, vehicle_class, license_number, document_path)
+values ('70000000-0000-4000-8000-000000000001','auto','auto','TS-SECRET-0001','70000000-0000-4000-8000-000000000001/licence.jpg'),
+       ('70000000-0000-4000-8000-000000000004','auto','auto','TS-SECRET-0004','70000000-0000-4000-8000-000000000004/licence.jpg');
 insert into public.active_drivers (user_id, is_online, current_lat, current_lng, heartbeat_at)
 values ('70000000-0000-4000-8000-000000000001', true, 12.97, 77.50, now()),
        ('70000000-0000-4000-8000-000000000004', true, 12.97, 77.50, now());
@@ -162,4 +162,21 @@ select chk('driver still cannot read the start OTP',
 reset role;
 
 \echo ''
-select expect(26);
+\echo '══════ and a driver cannot be approved without a document ══════'
+-- The form asked for one; the database never did. Tested through the admin RPC,
+-- because a direct update is separately reverted by the self-approval trigger —
+-- so a check here would pass without the constraint existing at all.
+insert into public.drivers (user_id, vehicle_type, vehicle_class)
+values ('70000000-0000-4000-8000-000000000003','auto','auto');
+select test_as('70000000-0000-4000-8000-00000000000a');
+do $$ begin
+  perform public.set_driver_verification('70000000-0000-4000-8000-000000000003','approved');
+  perform chk('approving a driver with no document is refused', false, true);
+exception when others then perform chk('approving a driver with no document is refused', true, true);
+end $$;
+select chk('they are still pending',
+  (select verification_status from public.drivers
+    where user_id='70000000-0000-4000-8000-000000000003'), 'pending');
+
+\echo ''
+select expect(28);

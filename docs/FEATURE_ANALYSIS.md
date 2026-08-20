@@ -249,8 +249,13 @@ map of files, routes, tables and RPCs.
 - **Payment gateway integration** (Razorpay/Stripe). The data model, method
   selection, status machine and receipts are complete; the actual charge call is
   stubbed at the `payments` row so a gateway can be dropped in without a migration.
-- **KYC document upload to Supabase Storage** — the driver form still takes a
-  document URL; Storage buckets need project-level configuration.
+- ~~**KYC document upload to Supabase Storage**~~ — **shipped in `0014`**. The
+  form used to ask for a link, hinting *"make sure it's viewable by anyone with
+  the link"* — telling applicants to publish their own driving licence to the
+  open web. Documents now go to a private bucket only the applicant and an admin
+  can read, and verification opens a signed URL that expires. The bucket and its
+  policies are created by the migration, guarded on the `storage` schema
+  existing so a local run is unaffected.
 - **SMS/e-mail delivery** for receipts (needs a provider).
 - ~~**Automated test suite**~~ — **built**. `supabase/tests/run.sh` applies every
   migration to a throwaway Postgres and runs 187 assertions across eight files,

@@ -9,8 +9,8 @@ insert into auth.users (id, phone, raw_user_meta_data) values
   ('f0000000-0000-4000-8000-000000000003','+919400000003','{"name":"Rider Two"}'),
   ('f0000000-0000-4000-8000-00000000000a','+919400000099','{"name":"Admin"}');
 update public.users set is_admin=true where id='f0000000-0000-4000-8000-00000000000a';
-insert into public.drivers (user_id, vehicle_type, vehicle_class)
-values ('f0000000-0000-4000-8000-000000000001','auto','auto');
+insert into public.drivers (user_id, vehicle_type, vehicle_class, document_path)
+values ('f0000000-0000-4000-8000-000000000001','auto','auto','f0000000-0000-4000-8000-000000000001/licence.jpg');
 insert into public.active_drivers (user_id, is_online, current_lat, current_lng, heartbeat_at)
 values ('f0000000-0000-4000-8000-000000000001', true, 12.97, 77.50, now());
 select test_as('f0000000-0000-4000-8000-00000000000a');
