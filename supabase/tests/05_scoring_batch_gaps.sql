@@ -73,8 +73,8 @@ begin
   -- intermediate states. Force it here so the refusal lands inside this block
   -- rather than escaping to the outer transaction.
   set constraints public.trg_trip_stops_order immediate;
-  raise notice 'FAIL  an impossible schedule was written';
-exception when others then raise notice 'PASS  refused (%)', left(sqlerrm, 60);
+    perform chk('an impossible schedule was written', false, true);
+exception when others then perform chk('an impossible schedule was written', true, true);
 end $$;
 
 \echo ''
@@ -137,4 +137,4 @@ select chk('all six are reported', count(*), 6::bigint) from public.pooling_metr
 select metric, value, unit from public.pooling_metrics(30);
 
 \echo ''
-select expect(19);
+select expect(20);

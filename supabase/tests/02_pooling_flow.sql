@@ -63,8 +63,8 @@ select test_as('11111111-1111-1111-1111-111111111111');
 select chk('wrong way down the corridor', count(*), 0::bigint) from public.poolable_rides();
 do $$ begin
   perform public.accept_pooled_ride(current_setting('t.c')::uuid);
-  raise notice 'FAIL  wrong-way ride was accepted anyway';
-exception when others then raise notice 'PASS  server refuses it directly (%)', sqlerrm;
+    perform chk('wrong-way ride was accepted anyway', false, true);
+exception when others then perform chk('wrong-way ride was accepted anyway', true, true);
 end $$;
 
 update public.rides set from_lng=77.54, to_lng=77.59, from_lat=13.025, to_lat=13.025 where id=current_setting('t.c')::uuid;
@@ -157,11 +157,11 @@ select set_config('t.d3', book('44444444-4444-4444-4444-444444444444'::uuid, 77.
 select test_as('11111111-1111-1111-1111-111111111111');
 do $$ begin
   perform public.accept_pooled_ride(current_setting('t.d3')::uuid);
-  raise notice 'FAIL  a full auto took another booking';
-exception when others then raise notice 'PASS  full auto refuses (%)', sqlerrm;
+    perform chk('a full auto took another booking', false, true);
+exception when others then perform chk('a full auto took another booking', true, true);
 end $$;
 select chk('seats available reads zero', public.trip_seats_available(id), 0::smallint)
   from public.trips where status='active';
 
 \echo ''
-select expect(29);
+select expect(31);

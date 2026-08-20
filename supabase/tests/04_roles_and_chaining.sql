@@ -59,16 +59,16 @@ select chk('now they are riding', public.current_mode('c0000000-0000-4000-8000-0
 select test_as('c0000000-0000-4000-8000-000000000001');
 do $$ begin
   perform public.set_user_mode('available');
-  raise notice 'FAIL  a passenger was allowed to go on duty';
-exception when others then raise notice 'PASS  going on duty is refused mid-ride (%)', sqlerrm;
+    perform chk('a passenger was allowed to go on duty', false, true);
+exception when others then perform chk('a passenger was allowed to go on duty', true, true);
 end $$;
 
 select set_config('t.other', bk('c0000000-0000-4000-8000-000000000003'::uuid, 77.60, 77.66)::text, false);
 select test_as('c0000000-0000-4000-8000-000000000001');
 do $$ begin
   perform public.accept_ride(current_setting('t.other')::uuid);
-  raise notice 'FAIL  a passenger was dispatched a ride to drive';
-exception when others then raise notice 'PASS  dispatch is refused mid-ride (%)', sqlerrm;
+    perform chk('a passenger was dispatched a ride to drive', false, true);
+exception when others then perform chk('a passenger was dispatched a ride to drive', true, true);
 end $$;
 
 \echo ''
@@ -78,8 +78,8 @@ select chk('the driver is on a trip', public.current_mode('c0000000-0000-4000-80
 do $$ begin
   insert into public.rides (rider_id, from_lat, from_lng, to_lat, to_lng, vehicle_type)
   values ('c0000000-0000-4000-8000-000000000004', 12.97, 77.50, 12.97, 77.55, 'bike');
-  raise notice 'FAIL  a driver mid-trip booked themselves a ride';
-exception when others then raise notice 'PASS  booking is refused mid-trip (%)', sqlerrm;
+    perform chk('a driver mid-trip booked themselves a ride', false, true);
+exception when others then perform chk('a driver mid-trip booked themselves a ride', true, true);
 end $$;
 
 \echo ''
@@ -114,8 +114,8 @@ select test_as('c0000000-0000-4000-8000-000000000004');
 select chk('nothing more is offered', count(*), 0::bigint) from public.chainable_rides();
 do $$ begin
   perform public.accept_chained_ride(current_setting('t.third')::uuid);
-  raise notice 'FAIL  a third booking was queued';
-exception when others then raise notice 'PASS  refused (%)', sqlerrm;
+    perform chk('a third booking was queued', false, true);
+exception when others then perform chk('a third booking was queued', true, true);
 end $$;
 
 \echo ''
@@ -138,4 +138,4 @@ select test_as('c0000000-0000-4000-8000-000000000001');
 select chk('going on duty now works', mode, 'available') from public.set_user_mode('available');
 
 \echo ''
-select expect(19);
+select expect(23);

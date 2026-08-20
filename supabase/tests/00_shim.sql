@@ -22,6 +22,15 @@ create or replace function auth.uid() returns uuid language sql stable as $$
   select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid;
 $$;
 
+-- Supabase grants table access to `authenticated` by default and lets RLS do
+-- the restricting. The shim has to mirror that, or every policy test fails with
+-- "permission denied" and proves nothing about the policy. Default privileges
+-- apply to tables the migrations create after this point, which is all of them.
+alter default privileges in schema public
+  grant select, insert, update, delete on tables to authenticated;
+alter default privileges in schema public grant select on tables to anon;
+alter default privileges in schema public grant usage, select on sequences to authenticated;
+
 -- Supabase grants these; the shim has to as well, or a test that drops to the
 -- `authenticated` role to exercise RLS cannot even resolve auth.uid().
 grant usage on schema auth to authenticated, anon;

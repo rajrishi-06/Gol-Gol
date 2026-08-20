@@ -64,8 +64,8 @@ select chk('solo dispatch hides it', count(*), 0::bigint)
   from public.nearby_pending_rides(12.97, 77.515, 'auto', 5);
 do $$ begin
   perform public.accept_ride(current_setting('t.b')::uuid);
-  raise notice 'FAIL  driver two sniped a held ride';
-exception when others then raise notice 'PASS  driver two is refused (%)', sqlerrm;
+    perform chk('driver two sniped a held ride', false, true);
+exception when others then perform chk('driver two sniped a held ride', true, true);
 end $$;
 select chk('and it is still pending', status, 'pending') from public.rides where id=current_setting('t.b')::uuid;
 
@@ -131,4 +131,4 @@ select round(fare) quoted, round(pool_discount) rebate, breach_credit credit, ro
   from public.rides where id=current_setting('t.a')::uuid;
 
 \echo ''
-select expect(22);
+select expect(23);

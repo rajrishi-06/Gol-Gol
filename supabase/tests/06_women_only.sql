@@ -76,8 +76,8 @@ select chk('another woman is offered it',
 \echo '   and the server refuses it even asked directly:'
 do $$ begin
   perform public.accept_pooled_ride(current_setting('t.man')::uuid);
-  raise notice 'FAIL  a man was added to a women-only trip';
-exception when others then raise notice 'PASS  refused (%)', sqlerrm;
+    perform chk('a man was added to a women-only trip', false, true);
+exception when others then perform chk('a man was added to a women-only trip', true, true);
 end $$;
 
 select chk('the woman can be added', status, 'accepted')
@@ -107,8 +107,8 @@ select chk('a women-only booking is not offered a mixed trip',
      from public.poolable_rides()), false);
 do $$ begin
   perform public.accept_pooled_ride(current_setting('t.asha2')::uuid);
-  raise notice 'FAIL  a women-only rider was pooled with a man';
-exception when others then raise notice 'PASS  refused (%)', sqlerrm;
+    perform chk('a women-only rider was pooled with a man', false, true);
+exception when others then perform chk('a women-only rider was pooled with a man', true, true);
 end $$;
 
 \echo ''
@@ -131,4 +131,4 @@ select chk('the pool context does not carry it',
   null::boolean);
 
 \echo ''
-select expect(12);
+select expect(14);

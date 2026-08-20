@@ -1,7 +1,7 @@
 # Pooling, unified roles and adaptive capacity — architecture spec
 
 **Status:** the whole build order — P0 through P5 — is **implemented** across
-migrations `0007`–`0010` and the frontend. Batch matching ships **switched off**;
+migrations `0007`–`0012` and the frontend. Batch matching ships **switched off**;
 see §11 for why turning it on is a volume decision rather than a deploy.
 **Companion:** a narrative version of this plan, with diagrams, is published as
 an artifact for review.
@@ -659,8 +659,8 @@ enough to need deliberate handling rather than inheritance from the solo flow.
 
 ## 10. RLS
 
-The schema sketches above are deliberately incomplete on RLS; it needs its own
-pass once the shape is agreed. The rules it has to satisfy:
+**Shipped in `0012`, and asserted in `07_rls.sql`** — see the note at the end of
+this document for the policy cycle that pass uncovered. The rules it satisfies:
 
 - A rider may read **their own booking** in full, and of the trip only what the
   ride view needs: driver identity, vehicle, live position, stop ETAs.
@@ -673,6 +673,9 @@ pass once the shape is agreed. The rules it has to satisfy:
 - `seat_holds` and `occupancy_events` are server-only: no client-side write path.
 - The corridor query runs `security definer`, because it must read trips the
   caller has no business reading directly.
+- No policy's `USING` clause may query a table that is itself policy-protected by
+  a clause querying back — Postgres detects the cycle and refuses every read.
+  Cross-table tests live in `security definer` helpers instead.
 
 ---
 
@@ -794,7 +797,8 @@ supabase/migrations/0008_seat_holds.sql seat holds + the detour audit
 supabase/migrations/0009_roles_and_chaining.sql  mode + sequential chaining
 supabase/migrations/0010_scoring_batch_and_gaps.sql  scoring, batching, the rest
 supabase/migrations/0011_women_only_and_private_channels.sql  women-only + channel RLS
-supabase/tests/run.sh                  applies every migration, runs 109 assertions
+supabase/migrations/0012_break_rls_recursion.sql     the rides↔drivers policy cycle
+supabase/tests/run.sh                  applies every migration, runs 145 assertions
 frontend/src/lib/pooling.js            RPC wrappers + local previews of the arithmetic
 frontend/src/components/ride/SeatPicker.jsx        seats + the sharing consent gate
 frontend/src/components/ride/SharedRideBanner.jsx  what the rider is told
@@ -1006,6 +1010,62 @@ join with `private: true`, checked against RLS policies on `realtime.messages`:
 The policies are guarded on the `realtime` schema existing, so the migration is a
 no-op on a stock Postgres — which is how the suite proves the chain applies.
 **They therefore cannot be tested here**; they need a real project.
+
+### The RLS policy cycle — fixed in `0012`
+
+`07_rls.sql` was written to prove §10's rules hold as policies rather than as
+prose. Its very first assertion — a rider selecting their own ride — failed:
+
+```
+ERROR:  infinite recursion detected in policy for relation "rides"
+```
+
+The cycle: `rides_select_dispatch` decides whether an on-duty driver may see a
+pending request by reading `active_drivers`/`drivers`; and `drivers_select_scoped`
+(added in `0006`, to stop strangers reading licence numbers) decides whether you
+may see a driver row by reading `rides`. Each policy's `USING` clause queries the
+other's table, so each re-enters the other's policy. Postgres refuses rather than
+looping.
+
+This had been latent since `0006` — six migrations. Nothing caught it because
+every earlier test ran as the table owner, and **RLS does not apply to a
+superuser**. On a real project it is not a subtle bug: every authenticated
+`select` on `rides` raises, so the rider's ride view, the driver's dispatch list,
+activity history and the pooling RPCs' client-side reads all fail at once.
+
+The fix is the standard one — take the cross-table lookups out of the policy
+expression and put them behind `security definer` helpers, which run as owner and
+so do not re-enter RLS:
+
+```sql
+create function public.can_dispatch_to_me(p_vehicle text) returns boolean
+  language sql stable security definer set search_path = public as $$
+    select exists (select 1 from public.drivers d
+                     join public.active_drivers ad on ad.user_id = d.user_id
+                    where d.user_id = auth.uid() ...);
+  $$;
+```
+
+Five such helpers (`can_dispatch_to_me`, `shares_ride_with`,
+`accepted_on_carpool_of`, `my_ride`, `my_trip`) now carry every cross-table test
+in the policies on `rides`, `drivers`, `active_drivers`, `trips`, `trip_stops`,
+`occupancy_events`, `seat_holds` and `match_queue`. Each helper answers only a
+yes/no about the **caller**, so making it definer widens nothing.
+
+`07_rls.sql` asserts the rules of §10 from a non-superuser session
+(`set role authenticated`), which is the only way any of this is testable: a
+rider reads their own ride and not a stranger's, a driver on duty sees a matching
+pending request and not one for the wrong vehicle class, co-passengers cannot
+read each other's bookings, and `seat_holds` and `occupancy_events` are
+unreadable from the client entirely.
+
+**Every "cannot read" assertion is paired with a control.** A test that asserts
+`count(*) = 0` passes just as cheerfully when the row was never created, so the
+file first re-runs each query as the owner and asserts the row *is* there. That
+pairing immediately earned itself: `cannot read the payment` had been passing
+against an empty table — `payments` only gets a row on completion, and the
+fixture's ride was still `ongoing`. It now completes a second ride under a second
+driver purely so there is a payment for the policy to hide.
 
 ### Still open
 
