@@ -66,7 +66,8 @@ const HINTS = {
  * account surface is one tap away instead of not existing.
  */
 export default function Account() {
-  const { profile, driver, isApprovedDriver, isAdmin, loading, updateProfile, signOut } = useAuth();
+  const { profile, driver, isApprovedDriver, isAdmin, loading, updateProfile, signOut, setMode } =
+    useAuth();
   const navigate = useNavigate();
 
   const [editing, setEditing] = useState(false);
@@ -102,6 +103,22 @@ export default function Account() {
   };
 
   const driverStatus = driver?.verification_status;
+
+  /**
+   * Same transition as the header switch, not a link.
+   *
+   * On phones this is the only way across, since the header switch is
+   * desktop-only — so if it were plain navigation, mobile drivers would be the
+   * ones who could walk into the driver side mid-ride and find out later.
+   */
+  const switchToDriving = async () => {
+    const { error } = await setMode("available");
+    if (error) {
+      toast.error(error.message || "Couldn't switch to driving.");
+      return;
+    }
+    navigate("/driver/dashboard");
+  };
 
   return (
     <Page
@@ -213,7 +230,7 @@ export default function Account() {
             <Card
               as="button"
               interactive
-              onClick={() => navigate("/driver/dashboard")}
+              onClick={switchToDriving}
               className="flex w-full items-center gap-4 p-4 text-left"
             >
               <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-primary-subtle text-primary-subtle-fg">

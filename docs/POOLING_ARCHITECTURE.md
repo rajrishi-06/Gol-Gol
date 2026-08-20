@@ -883,7 +883,13 @@ Two refusals do the real work:
   through PostgREST.
 
 The header switch calls `set_user_mode` and surfaces the refusal, rather than
-routing to a driver screen that then fails confusingly.
+routing to a driver screen that then fails confusingly. So does the Account
+page's "Switch to driving" — that one matters more, because the header switch is
+`hidden sm:flex` and Account is the only crossing on a phone.
+
+`tabsFor` takes mode as a tiebreak alongside the route, so a driver mid-trip who
+taps through to their account keeps the driving tabs instead of being dropped
+back into rider navigation.
 
 ### Sequential chaining — shipped in `0009`
 
