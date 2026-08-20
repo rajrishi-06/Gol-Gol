@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "./supabase";
+import { DRIVING_MODES, currentMode, setUserMode } from "./pooling";
 
 /**
  * Single source of truth for "who is using the app".
@@ -34,6 +35,10 @@ export function AuthProvider({ children }) {
   // The session resolves before the profile does (see loadContext). Role-gated
   // routes must wait for this, or they'd redirect on a not-yet-loaded role.
   const [profileLoaded, setProfileLoaded] = useState(false);
+  // What the user is doing *right now*, as opposed to what they may do. The
+  // server owns it; this is a cache so the shell can pick a tab set without a
+  // round trip on every render.
+  const [mode, setModeState] = useState("idle");
   const loadingRef = useRef(false);
 
   /** Load the profile + driver + settings rows for a signed-in user. */
@@ -166,6 +171,37 @@ export function AuthProvider({ children }) {
     setProfileLoaded(true);
   }, []);
 
+  // Load the server's view of the mode once the session is known, and again
+  // whenever the driver record changes (approval flips what is even possible).
+  useEffect(() => {
+    if (status !== "authenticated") {
+      setModeState("idle");
+      return;
+    }
+    let active = true;
+    (async () => {
+      const { data } = await currentMode();
+      if (active && typeof data === "string") setModeState(data);
+    })();
+    return () => {
+      active = false;
+    };
+  }, [status, state.driver?.verification_status]);
+
+  /**
+   * Switch between riding and driving.
+   *
+   * Returns `{ error }` rather than throwing, because the server refuses this
+   * for good reasons the user needs to read — you cannot go on duty while you
+   * are sitting in someone else's back seat.
+   */
+  const setMode = useCallback(async (next, dest = null) => {
+    const { data, error } = await setUserMode(next, dest);
+    if (error) return { error };
+    setModeState(data?.mode ?? next);
+    return { error: null };
+  }, []);
+
   const value = useMemo(() => {
     const { session, user, profile, driver, settings } = state;
     return {
@@ -183,6 +219,9 @@ export function AuthProvider({ children }) {
       settings,
       isDriver: Boolean(profile?.is_driver),
       isApprovedDriver: driver?.verification_status === "approved",
+      mode,
+      isDriving: DRIVING_MODES.includes(mode),
+      setMode,
       isAdmin: Boolean(profile?.is_admin),
       displayName: profile?.name || "Rider",
       refresh,
@@ -190,7 +229,7 @@ export function AuthProvider({ children }) {
       updateSettings,
       signOut,
     };
-  }, [state, status, profileLoaded, refresh, updateProfile, updateSettings, signOut]);
+  }, [state, status, profileLoaded, mode, setMode, refresh, updateProfile, updateSettings, signOut]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

@@ -21,11 +21,11 @@ import { isImmersiveRoute, tabsFor } from "./navItems";
  */
 export default function AppLayout() {
   const { pathname } = useLocation();
-  const { isAuthenticated, isApprovedDriver, isAdmin } = useAuth();
+  const { isAuthenticated, isApprovedDriver, isAdmin, isDriving } = useAuth();
   const { count: unrated } = useUnratedRides();
 
   const immersive = isImmersiveRoute(pathname);
-  const tabs = tabsFor(pathname, { isApprovedDriver });
+  const tabs = tabsFor(pathname, { isApprovedDriver, isDriving });
   const badges = {
     "/activity": unrated,
     "/driver/trips": unrated,

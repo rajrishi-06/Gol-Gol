@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 import { ArrowLeft, Car, Navigation } from "lucide-react";
 import { useAuth } from "../../lib/auth.jsx";
 import { cn } from "../../lib/cn";
@@ -9,11 +11,29 @@ import NotificationBell from "../NotificationBell";
 import { isDriverRoute } from "./navItems";
 
 /**
- * Mode switch for people who both ride and drive. Route-derived, so it can
- * never disagree with the screen you're on.
+ * Mode switch for people who both ride and drive.
+ *
+ * It is a real state change, not navigation. Going on duty is refused while you
+ * are someone's passenger, and the refusal is worth reading — so the server
+ * decides and this surfaces what it said, rather than routing away and letting
+ * the driver screen fail confusingly later.
  */
 function ModeSwitch({ driving }) {
   const navigate = useNavigate();
+  const { setMode } = useAuth();
+  const [busy, setBusy] = useState(false);
+
+  const go = async (key, to) => {
+    setBusy(true);
+    const { error } = await setMode(key === "drive" ? "available" : "idle");
+    setBusy(false);
+    if (error) {
+      toast.error(error.message || "Couldn't switch mode.");
+      return;
+    }
+    navigate(to);
+  };
+
   const options = [
     { key: "ride", label: "Ride", icon: Car, to: "/" },
     { key: "drive", label: "Drive", icon: Navigation, to: "/driver/dashboard" },
@@ -31,9 +51,10 @@ function ModeSwitch({ driving }) {
             key={key}
             type="button"
             aria-pressed={active}
-            onClick={() => navigate(to)}
+            disabled={busy}
+            onClick={() => go(key, to)}
             className={cn(
-              "inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+              "inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60",
               active ? "bg-surface text-foreground shadow-soft" : "text-muted hover:text-foreground"
             )}
           >

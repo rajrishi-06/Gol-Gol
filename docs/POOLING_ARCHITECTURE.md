@@ -1,8 +1,7 @@
 # Pooling, unified roles and adaptive capacity — architecture spec
 
-**Status:** phases P1, P3 and P4 are **implemented** in
-`supabase/migrations/0007_pooling.sql` and the frontend. P0 (unified rider/driver
-mode), P2 (sequential chaining) and P5 (batch matching) are still proposals.
+**Status:** P0 through P4 are **implemented** across migrations `0007`–`0009`
+and the frontend. P5 (batch matching) is deliberately not built — see §11.
 **Companion:** a narrative version of this plan, with diagrams, is published as
 an artifact for review.
 
@@ -676,7 +675,7 @@ pass once the shape is agreed. The rules it has to satisfy:
 Ordered so the risky migration lands while nothing depends on it, and so
 something useful ships at every step rather than after all of it.
 
-### P0 — Unified role & mode — not yet built
+### P0 — Unified role & mode ✅ shipped
 One session state per user with the mutual-exclusion invariant in the database;
 the header switch becomes a real transition. No pooling yet.
 *De-risks: nothing else is safe to build until "driving while riding" is impossible.*
@@ -693,7 +692,7 @@ Touches: `trips`/`trip_stops`/`vehicle_classes` DDL + backfill, `accept_ride`,
 `start_ride`, `complete_ride`, `cancel_ride` rewritten against trips,
 `src/lib/rides.js`, `src/lib/activeRide.jsx`, `src/lib/useRideLive.js`.
 
-### P2 — Sequential chaining — not yet built
+### P2 — Sequential chaining ✅ shipped
 A driver accepts the *next* fare while finishing the current one. No concurrency,
 no capacity maths, no detour. **Works for bikes.**
 *Delivers the "faster pickups" value immediately and exercises the stop-sequence
@@ -716,10 +715,20 @@ occupants, and the proactive re-dispatch of §4.4.
 Touches: `occupancy_events`, `confirm_pickup_headcount`,
 `confirm_extra_occupant`, `amend_booking_seats`, driver pickup screen.
 
-### P5 — Batch matching & tuning — not yet built
+### P5 — Batch matching & tuning — deliberately not built
 Hold requests in a short window and solve jointly; per-city scoring weights;
 interaction with surge.
-*Only pays off at volume.*
+
+This is the one phase left undone on purpose rather than for lack of time. It is
+the single largest quality lever in pooling **and** the one that only pays off
+once there is enough concurrent demand to batch: with a handful of requests in
+flight, a 3–5 second holding window costs every rider that delay and buys
+assignments no better than greedy matching already produces. Building it now
+would optimise a market that does not exist yet, and would add a latency floor
+to every booking to do it.
+
+Worth revisiting when the match rate and concurrent-request volume in §12 say the
+window would actually have something to choose between.
 
 ---
 
@@ -770,7 +779,8 @@ but they are calls for the product owner, not for engineering.
 ```
 supabase/migrations/0007_pooling.sql   trips, stops, matching, capacity
 supabase/migrations/0008_seat_holds.sql seat holds + the detour audit
-supabase/tests/run.sh                  applies every migration, runs 54 assertions
+supabase/migrations/0009_roles_and_chaining.sql  mode + sequential chaining
+supabase/tests/run.sh                  applies every migration, runs 85 assertions
 frontend/src/lib/pooling.js            RPC wrappers + local previews of the arithmetic
 frontend/src/components/ride/SeatPicker.jsx        seats + the sharing consent gate
 frontend/src/components/ride/SharedRideBanner.jsx  what the rider is told
@@ -813,6 +823,8 @@ without a deploy:
 | `hold_seconds` | 25 | how long an offer reserves its seat and request |
 | `breach_rate_per_min` | 8 | credit per minute over the promised detour |
 | `breach_cap_pct` | 25 | ceiling on that credit, as a share of the fare |
+| `chain_lead_km` | 6 | how close to finishing before the next fare is offered |
+| `chain_radius_km` | 4 | how far a chained pickup may be from where the driver finishes |
 
 ### Seat holds — shipped in `0008`
 
@@ -849,6 +861,54 @@ money. `ride_actual_detour_min` walks the stop sequence between the rider's
 pickup and drop, subtracts their direct distance, and converts with the same
 `road_factor` the promise was quoted with.
 
+### Unified role and mode — shipped in `0009`
+
+`users` plus a verified `drivers` row was always a capability model: it says what
+you *may* do, never what you are doing. `user_modes` — one row per user, so the
+invariant holds by construction — carries `idle | seeking | riding | available |
+on_trip | heading_home`.
+
+The mode is **maintained by the flow, not asserted by the client**. A mode nobody
+updates goes stale and then gets trusted, so booking, accepting, boarding,
+completing and cancelling all move it via triggers, and `set_user_mode` only
+accepts the three modes a person can actually choose (`idle`, `available`,
+`heading_home`) — the rest are consequences.
+
+Two refusals do the real work:
+
+- `assert_can_drive` — going on duty or accepting a ride is refused while you
+  hold any booking in `accepted | arrived | ongoing`.
+- `assert_can_ride` — booking a ride is refused while you are driving an active
+  trip. This one is a trigger on `rides`, because bookings still insert straight
+  through PostgREST.
+
+The header switch calls `set_user_mode` and surfaces the refusal, rather than
+routing to a driver screen that then fails confusingly.
+
+### Sequential chaining — shipped in `0009`
+
+The other half of "take another fare nearby", and the half a bike can safely
+have: accept the *next* booking while finishing the current one, with its pickup
+strictly after every drop still to be made. No two contracts are aboard at once,
+so there is no capacity overlap and nobody already riding loses a second.
+
+That is why the gates in `chainable_rides` are so much shorter than
+`poolable_rides` — no corridor, no detour cap, no consent gate, because nothing
+about this affects the rider already aboard. What matters instead is that the
+driver is nearly done (`chain_lead_km`, default 6) and the new pickup is close to
+where they will end up (`chain_radius_km`, default 4).
+
+Ordering stops by progress does the rest: a pickup beyond the final drop sorts
+last on its own, and the capacity walk then sees every seat released before any
+is taken again.
+
+**One correction this forced.** `trip_recount` summed every live booking into
+`seats_booked`, which is right when spans overlap — that is what pooling is.
+Chained bookings never overlap, so a one-seat bike carrying one rider with one
+queued summed to 2 and tripped the check constraint. The honest figure is peak
+occupancy along the route: identical to the sum when spans overlap, and the
+largest single booking when they do not.
+
 ### Still open
 
-- **P0 and P2** as above.
+Nothing from the build order except P5, above, which is deliberate.

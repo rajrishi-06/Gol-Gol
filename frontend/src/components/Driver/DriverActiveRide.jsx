@@ -8,8 +8,11 @@ import { useRideLive } from "../../lib/useRideLive";
 import { useDriverPresence } from "../../lib/useDriverPresence";
 import { completeRide, markArrived, startRide, updateRideEta } from "../../lib/rides";
 import {
+  acceptChainedRide,
   acceptPooledRide,
+  chainableRides,
   driverTripState,
+  holdChainSeat,
   holdPoolSeat,
   poolableRides,
   releaseSeatHold,
@@ -60,6 +63,9 @@ export default function DriverActiveRide() {
   const [nearDestination, setNearDestination] = useState(false);
   const [tripState, setTripState] = useState(null);
   const [offer, setOffer] = useState(null);
+  // "pool" shares the vehicle now; "chain" is the next fare, taken when this
+  // one ends. Different gates server-side, different card, same hold.
+  const [offerKind, setOfferKind] = useState("pool");
   const [offerLeft, setOfferLeft] = useState(null);
   const [offerBusy, setOfferBusy] = useState(false);
   const [dismissed, setDismissed] = useState(() => new Set());
@@ -165,7 +171,12 @@ export default function DriverActiveRide() {
 
   // ── offers along the current route ───────────────────────────────────────
   const seatsFree = tripState?.seats_available ?? 0;
-  const poolOpen = ride?.status === "ongoing" && seatsFree > 0;
+  // Both kinds only make sense once the driver is actually carrying someone.
+  // Pooling additionally needs a spare seat; chaining does not, because the
+  // vehicle will be empty by the time the next rider boards — which is exactly
+  // why a one-seat bike can chain and can never pool.
+  const offersOpen = ride?.status === "ongoing";
+  const poolOpen = offersOpen && seatsFree > 0;
 
   // Release whatever we are holding, wherever we leave from.
   const dropHold = useCallback(async () => {
@@ -176,7 +187,7 @@ export default function DriverActiveRide() {
   }, []);
 
   useEffect(() => {
-    if (!poolOpen) {
+    if (!offersOpen) {
       setOffer(null);
       dropHold();
       return undefined;
@@ -186,9 +197,24 @@ export default function DriverActiveRide() {
     const look = async () => {
       // Don't go looking while the driver is deciding on one.
       if (heldRef.current) return;
-      const { data } = await poolableRides(3);
+
+      // Sharing the vehicle now beats queueing the next fare, so try pooling
+      // first and fall back to chaining. A trip with no spare seat — a bike,
+      // or a full auto — goes straight to chaining.
+      let kind = "pool";
+      let rows = [];
+      if (poolOpen) {
+        const { data } = await poolableRides(3);
+        rows = data ?? [];
+      }
+      if (!rows.length) {
+        kind = "chain";
+        const { data } = await chainableRides(3);
+        rows = data ?? [];
+      }
       if (!active) return;
-      const next = (data ?? []).find((o) => !dismissed.has(o.ride_id));
+
+      const next = rows.find((o) => !dismissed.has(o.ride_id));
       if (!next) {
         setOffer(null);
         return;
@@ -196,7 +222,8 @@ export default function DriverActiveRide() {
       // Reserve it before showing it, so the card the driver sees is one they
       // can actually take. Losing the reservation is how a race is lost, and
       // it means we simply never showed the offer.
-      const { data: hold } = await holdPoolSeat(next.ride_id);
+      const { data: hold } =
+        kind === "pool" ? await holdPoolSeat(next.ride_id) : await holdChainSeat(next.ride_id);
       if (!active) {
         if (hold) releaseSeatHold(next.ride_id);
         return;
@@ -206,6 +233,7 @@ export default function DriverActiveRide() {
         return;
       }
       heldRef.current = next.ride_id;
+      setOfferKind(kind);
       setOffer(next);
       setOfferLeft(Math.max(0, Math.round((new Date(hold.expiresAt) - Date.now()) / 1000)));
     };
@@ -216,7 +244,7 @@ export default function DriverActiveRide() {
       active = false;
       clearInterval(timer);
     };
-  }, [poolOpen, dismissed, dropHold]);
+  }, [offersOpen, poolOpen, dismissed, dropHold]);
 
   // Countdown; when it runs out the hold has lapsed server-side too, so the
   // card goes away rather than lying about being available.
@@ -236,8 +264,11 @@ export default function DriverActiveRide() {
   useEffect(() => () => { if (heldRef.current) releaseSeatHold(heldRef.current); }, []);
 
   const handleAcceptOffer = async (candidate) => {
+    const chained = offerKind === "chain";
     setOfferBusy(true);
-    const { data, error: err } = await acceptPooledRide(candidate.ride_id);
+    const { data, error: err } = chained
+      ? await acceptChainedRide(candidate.ride_id)
+      : await acceptPooledRide(candidate.ride_id);
     setOfferBusy(false);
     heldRef.current = null;      // consumed by the accept, or already gone
     setOfferLeft(null);
@@ -260,12 +291,16 @@ export default function DriverActiveRide() {
     // they never take does not hand them an identity.
     notifyUser({
       userId: data.rider_id,
-      title: "Driver found — you're sharing",
-      body: "Your driver is already on the road and heading your way.",
+      title: chained ? "Driver found" : "Driver found — you're sharing",
+      body: chained
+        ? "Your driver is finishing a trip nearby and will be with you shortly."
+        : "Your driver is already on the road and heading your way.",
       url: `/rider/ride/${candidate.ride_id}`,
       type: "ride_accepted",
     });
-    toast.success(`${candidate.rider_name} added to this trip`);
+    toast.success(
+      chained ? `${candidate.rider_name} queued as your next fare` : `${candidate.rider_name} added to this trip`
+    );
   };
 
   // ── actions ───────────────────────────────────────────────────────────────
@@ -492,10 +527,11 @@ export default function DriverActiveRide() {
         )}
 
         {/* Another booking along the road we're already on */}
-        {poolOpen && offer && (
+        {offersOpen && offer && (
           <div className="mt-4">
             <PoolOfferCard
               offer={offer}
+              kind={offerKind}
               busy={offerBusy}
               onAccept={handleAcceptOffer}
               secondsLeft={offerLeft}

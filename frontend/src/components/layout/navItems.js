@@ -17,8 +17,12 @@ import {
  *
  * Two tab sets, because riding and driving are genuinely different jobs: a
  * driver on shift wants dispatch and earnings, a rider wants a map and their
- * trips. The active set is chosen by route (`/driver/*` → driving), so the
- * shell never disagrees with the screen you're looking at.
+ * trips.
+ *
+ * The route decides, with mode as the tiebreak: `/driver/*` is unambiguous, and
+ * everywhere else a driver who is on duty or mid-trip still gets the driving
+ * set. Route alone put a driver on a job into rider tabs the moment they tapped
+ * through to their account.
  */
 
 export const RIDER_TABS = [
@@ -68,7 +72,14 @@ export function isDriverRoute(pathname) {
   return pathname.startsWith("/driver");
 }
 
-/** Which tab set to show for the current route + role. */
-export function tabsFor(pathname, { isApprovedDriver }) {
-  return isDriverRoute(pathname) && isApprovedDriver ? DRIVER_TABS : RIDER_TABS;
+/**
+ * Which tab set to show.
+ *
+ * The route wins where it is unambiguous; mode is the tiebreak everywhere else,
+ * so a driver who is on duty or mid-trip keeps the driving tabs when they tap
+ * through to their account instead of being dropped back into rider navigation.
+ */
+export function tabsFor(pathname, { isApprovedDriver, isDriving = false }) {
+  if (!isApprovedDriver) return RIDER_TABS;
+  return isDriverRoute(pathname) || isDriving ? DRIVER_TABS : RIDER_TABS;
 }

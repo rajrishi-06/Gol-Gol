@@ -56,6 +56,51 @@ export const ridePoolContext = (rideId) => rpc("ride_pool_context", { p_ride_id:
 export const confirmExtraOccupant = (rideId, seats) =>
   rpc("confirm_extra_occupant", { p_ride_id: rideId, p_seats: seats });
 
+// ── sequential chaining ─────────────────────────────────────────────────────
+
+/**
+ * Requests the driver could take *next*, offered while they finish the current
+ * one. Not the pooling funnel: nothing here overlaps the rider already aboard,
+ * so there is no corridor, no detour cap and no consent gate — and a bike,
+ * which can never pool, can do this.
+ */
+export const chainableRides = (limit = 5) => rpc("chainable_rides", { p_limit: limit });
+
+/** Queue the next fare onto the end of the current trip. */
+export const acceptChainedRide = (rideId) => rpc("accept_chained_ride", { p_ride_id: rideId });
+
+/** Hold a chained offer, same as a pooled one. */
+export const holdChainSeat = async (rideId) => {
+  const { data, error } = await rpc("hold_chain_seat", { p_ride_id: rideId });
+  if (error) return { data: null, error };
+  const row = Array.isArray(data) ? data[0] : data;
+  return {
+    data: row ? { holdId: row.hold_id, expiresAt: row.expires_at, seconds: row.seconds } : null,
+    error: null,
+  };
+};
+
+// ── mode ────────────────────────────────────────────────────────────────────
+
+/**
+ * Switch between riding and driving.
+ *
+ * A real transition, not navigation: the server refuses when the invariant says
+ * no — you cannot go on duty while you are someone's passenger, and you cannot
+ * book a ride while you are driving one.
+ */
+export const setUserMode = (mode, dest = null) =>
+  rpc("set_user_mode", {
+    p_mode: mode,
+    p_dest_lat: dest?.lat ?? null,
+    p_dest_lng: dest?.lng ?? null,
+  });
+
+export const currentMode = () => rpc("current_mode", {});
+
+/** Modes in which the app should be showing the driving side of the house. */
+export const DRIVING_MODES = ["available", "on_trip", "heading_home"];
+
 /** Never match me with this person again. */
 export const blockCoPassenger = (userId) => rpc("block_co_passenger", { p_user_id: userId });
 
